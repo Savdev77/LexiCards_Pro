@@ -1,0 +1,2431 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LexiCards Pro — Умный аналог Quizlet с памятью, PDF и озвучкой</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Mozilla PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Plus Jakarta Sans', 'Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        quiz: {
+                            bg: '#EEF2FF',
+                            primary: '#4255FF',
+                            primaryDark: '#3142D6',
+                            violet: '#6366F1',
+                            amber: '#F59E0B',
+                            emerald: '#10B981',
+                            coral: '#EF4444',
+                            navy: '#1E293B'
+                        }
+                    },
+                    boxShadow: {
+                        'card': '0 14px 34px -6px rgba(66, 85, 255, 0.14), 0 4px 12px -2px rgba(15, 23, 42, 0.05)',
+                        'card-hover': '0 20px 42px -6px rgba(66, 85, 255, 0.22), 0 8px 18px -4px rgba(15, 23, 42, 0.08)',
+                        'btn-indigo': '0 4px 0 #2938B5',
+                        'btn-emerald': '0 4px 0 #059669',
+                        'btn-amber': '0 4px 0 #D97706',
+                        'btn-coral': '0 4px 0 #DC2626',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #EEF2FF;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(66, 85, 255, 0.14) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(124, 58, 237, 0.12) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.10) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: #1E293B;
+            overflow-x: hidden;
+        }
+
+        /* 3D Flashcard Flip */
+        .perspective-1000 {
+            perspective: 1200px;
+        }
+        .transform-style-3d {
+            transform-style: preserve-3d;
+            transition: transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .backface-hidden {
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        .rotate-y-180 {
+            transform: rotateY(180deg);
+        }
+
+        /* Animations */
+        @keyframes swipeRight {
+            0% { transform: translateX(0) rotate(0deg); opacity: 1; }
+            50% { transform: translateX(95px) rotate(6deg); opacity: 0.3; }
+            100% { transform: translateX(0) rotate(0deg); opacity: 1; }
+        }
+        @keyframes swipeLeft {
+            0% { transform: translateX(0) rotate(0deg); opacity: 1; }
+            50% { transform: translateX(-95px) rotate(-6deg); opacity: 0.3; }
+            100% { transform: translateX(0) rotate(0deg); opacity: 1; }
+        }
+        @keyframes shakeWrong {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-8px); }
+            40%, 80% { transform: translateX(8px); }
+        }
+        @keyframes popOut {
+            0% { transform: scale(1); opacity: 1; }
+            45% { transform: scale(1.1); opacity: 0.95; }
+            100% { transform: scale(0); opacity: 0; }
+        }
+        @keyframes pulseSpeak {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.14); }
+        }
+
+        .anim-swipe-right { animation: swipeRight 0.42s ease-out; }
+        .anim-swipe-left { animation: swipeLeft 0.42s ease-out; }
+        .anim-shake { animation: shakeWrong 0.4s ease-in-out; }
+        .anim-pop-out { animation: popOut 0.35s forwards ease-in; }
+        .speaking-active {
+            animation: pulseSpeak 0.75s infinite ease-in-out;
+            background: linear-gradient(135deg, #4255FF, #8B5CF6) !important;
+            color: #FFFFFF !important;
+            box-shadow: 0 0 16px rgba(66, 85, 255, 0.55);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #E2E8F0; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb { background: #94A3B8; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748B; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white">
+
+    <!-- ==================== TOP HEADER BAR ==================== -->
+    <header class="sticky top-0 z-40 bg-gradient-to-r from-[#3849E8] via-[#4255FF] to-[#6D4AFF] text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3">
+            <!-- Brand & Auto-Save Status -->
+            <div class="flex items-center gap-3">
+                <div onclick="app.switchTab('flashcards')" class="w-11 h-11 rounded-2xl bg-white/15 backdrop-blur-md border border-white/30 flex items-center justify-center shadow-inner cursor-pointer hover:scale-105 transition">
+                    <i class="fa-solid fa-bolt-lightning text-amber-300 text-xl"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span onclick="app.switchTab('flashcards')" class="font-display font-extrabold text-xl sm:text-2xl tracking-tight cursor-pointer">LexiCards</span>
+                        <span class="bg-amber-400 text-slate-900 text-[11px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">PRO</span>
+                    </div>
+                    <!-- Live LocalStorage Indicator -->
+                    <div id="saveStatusBadge" class="flex items-center gap-1.5 text-[11px] text-emerald-200 font-medium mt-0.5">
+                        <span id="saveStatusDot" class="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span>
+                        <span id="saveStatusText">💾 Все изменения сохранены в памяти браузера</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Global TTS Voice Controls -->
+            <div class="hidden xl:flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 px-3.5 py-1.5 rounded-2xl">
+                <i class="fa-solid fa-volume-high text-amber-300 text-sm"></i>
+                <span class="text-xs font-medium text-indigo-100">Акцент:</span>
+                <select id="voiceAccentSelect" onchange="app.setVoiceAccent(this.value)" class="bg-indigo-950/60 text-white text-xs font-bold rounded-xl px-2.5 py-1 border border-white/20 focus:outline-none cursor-pointer">
+                    <option value="en-US">🇺🇸 US English</option>
+                    <option value="en-GB">🇬🇧 UK English</option>
+                </select>
+
+                <div class="h-4 w-[1px] bg-white/20 mx-1"></div>
+
+                <button id="speedToggleBtn" onclick="app.toggleVoiceSpeed()" title="Переключить обычную (1.0x) и медленную (0.7x) озвучку" class="flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-xl bg-white/15 hover:bg-white/25 transition">
+                    <span id="speedIcon">🐇</span>
+                    <span id="speedLabel">1.0x</span>
+                </button>
+
+                <button id="autoSpeakToggleBtn" onclick="app.toggleAutoSpeak()" title="Автоматически озвучивать слово при открытии карточки" class="flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-xl bg-emerald-400/25 border border-emerald-300/40 text-emerald-100 hover:bg-emerald-400/35 transition">
+                    <i class="fa-solid fa-ear-listen"></i>
+                    <span id="autoSpeakLabel">Авто: ВКЛ</span>
+                </button>
+            </div>
+
+            <!-- Action Buttons (PDF Import, Add Word, Backup, Reset) -->
+            <div class="flex flex-wrap items-center gap-2">
+                <button onclick="app.openPdfModal()" class="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-slate-900 font-extrabold text-xs sm:text-sm px-3.5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition active:scale-95">
+                    <i class="fa-solid fa-file-pdf text-rose-600 text-base"></i>
+                    <span>Импорт из PDF</span>
+                </button>
+
+                <button onclick="app.openWordModal()" class="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-white font-extrabold text-xs sm:text-sm px-3.5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition active:scale-95">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Добавить слово</span>
+                </button>
+
+                <button onclick="app.openBackupModal()" class="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 border border-white/25 text-white font-bold text-xs px-3 py-2.5 rounded-xl transition" title="Экспорт / Импорт словаря (JSON) и Сброс прогресса">
+                    <i class="fa-solid fa-database text-amber-300"></i>
+                    <span class="hidden md:inline">Память / JSON</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile/Tablet Voice Controls Bar -->
+        <div class="xl:hidden bg-indigo-950/35 border-t border-white/10 px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-volume-high text-amber-300"></i>
+                <select id="voiceAccentSelectMobile" onchange="app.setVoiceAccent(this.value)" class="bg-indigo-900/80 text-white text-xs font-bold rounded-lg px-2 py-1 border border-white/20">
+                    <option value="en-US">🇺🇸 US English</option>
+                    <option value="en-GB">🇬🇧 UK English</option>
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="app.toggleVoiceSpeed()" id="speedToggleBtnMobile" class="px-2.5 py-1 rounded-lg bg-white/15 font-bold">🐇 1.0x</button>
+                <button onclick="app.toggleAutoSpeak()" id="autoSpeakToggleBtnMobile" class="px-2.5 py-1 rounded-lg bg-emerald-500/30 border border-emerald-300/40 font-bold">🔊 Авто: ВКЛ</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ==================== MAIN CONTENT ==================== -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- TOP STATISTICS DASHBOARD & PROGRESS BAR -->
+        <section class="bg-white rounded-3xl p-5 sm:p-6 shadow-card border border-indigo-100">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+                <!-- Total Words -->
+                <div class="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 flex items-center justify-between">
+                    <div>
+                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-indigo-500 block">Всего слов</span>
+                        <span id="statTotalWords" class="font-display font-extrabold text-2xl sm:text-3xl text-slate-800">0</span>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-lg shadow-sm">
+                        <i class="fa-solid fa-book-bookmark"></i>
+                    </div>
+                </div>
+
+                <!-- Known Words (Emerald) -->
+                <div class="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 flex items-center justify-between">
+                    <div>
+                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-emerald-600 block">Знаю ✅</span>
+                        <span id="statKnownWords" class="font-display font-extrabold text-2xl sm:text-3xl text-emerald-600">0</span>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center text-lg shadow-sm">
+                        <i class="fa-solid fa-circle-check"></i>
+                    </div>
+                </div>
+
+                <!-- Learning Words (Amber) -->
+                <div class="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 flex items-center justify-between">
+                    <div>
+                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-amber-600 block">Еще учу ⏳</span>
+                        <span id="statLearningWords" class="font-display font-extrabold text-2xl sm:text-3xl text-amber-500">0</span>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg shadow-sm">
+                        <i class="fa-solid fa-hourglass-half"></i>
+                    </div>
+                </div>
+
+                <!-- Best Match Record -->
+                <div class="p-4 rounded-2xl bg-purple-50/70 border border-purple-200 flex items-center justify-between">
+                    <div>
+                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-purple-600 block">Рекорд Подбора</span>
+                        <span id="statBestMatch" class="font-display font-extrabold text-2xl sm:text-3xl text-purple-600">—</span>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center text-lg shadow-sm">
+                        <i class="fa-solid fa-stopwatch"></i>
+                    </div>
+                </div>
+
+                <!-- Best Test Score -->
+                <div class="col-span-2 sm:col-span-1 p-4 rounded-2xl bg-rose-50/70 border border-rose-200 flex items-center justify-between">
+                    <div>
+                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-rose-600 block">Лучший Тест</span>
+                        <span id="statBestTest" class="font-display font-extrabold text-2xl sm:text-3xl text-rose-600">—</span>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center text-lg shadow-sm">
+                        <i class="fa-solid fa-Award"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Overall Mastery Progress Bar -->
+            <div class="mt-4 pt-4 border-t border-slate-100">
+                <div class="flex flex-wrap items-center justify-between text-xs font-bold mb-1.5 gap-2">
+                    <span class="text-slate-600">Общий прогресс освоения словаря (сохраняется автоматически):</span>
+                    <span id="statMasteryPercent" class="text-emerald-600 font-extrabold">0% выучено</span>
+                </div>
+                <div class="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
+                    <div id="barKnownPct" class="bg-emerald-500 h-full transition-all duration-500" style="width: 0%" title="Выучено (Знаю)"></div>
+                    <div id="barLearningPct" class="bg-amber-400 h-full transition-all duration-500" style="width: 0%" title="На изучении (Еще учу)"></div>
+                </div>
+            </div>
+
+            <!-- 5 QUIZLET NAVIGATION TABS -->
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 mt-5 pt-4 border-t border-slate-100">
+                <button onclick="app.switchTab('flashcards')" id="nav-tab-flashcards" class="flex items-center gap-3 p-3 rounded-2xl border-2 transition text-left">
+                    <div class="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-base shrink-0">
+                        <i class="fa-solid fa-clone"></i>
+                    </div>
+                    <div class="overflow-hidden">
+                        <div class="font-extrabold text-xs sm:text-sm text-slate-800 truncate">Карточки</div>
+                        <div class="text-[11px] text-slate-500 truncate">3D + Озвучка</div>
+                    </div>
+                </button>
+
+                <button onclick="app.switchTab('learn')" id="nav-tab-learn" class="flex items-center gap-3 p-3 rounded-2xl border-2 transition text-left">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-base shrink-0">
+                        <i class="fa-solid fa-brain"></i>
+                    </div>
+                    <div class="overflow-hidden">
+                        <div class="font-extrabold text-xs sm:text-sm text-slate-800 truncate">Заучивание</div>
+                        <div class="text-[11px] text-slate-500 truncate">Тест + Письмо</div>
+                    </div>
+                </button>
+
+                <button onclick="app.switchTab('match')" id="nav-tab-match" class="flex items-center gap-3 p-3 rounded-2xl border-2 transition text-left">
+                    <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-base shrink-0">
+                        <i class="fa-solid fa-puzzle-piece"></i>
+                    </div>
+                    <div class="overflow-hidden">
+                        <div class="font-extrabold text-xs sm:text-sm text-slate-800 truncate">Подбор</div>
+                        <div class="text-[11px] text-slate-500 truncate">Игра + Рекорды</div>
+                    </div>
+                </button>
+
+                <button onclick="app.switchTab('test')" id="nav-tab-test" class="flex items-center gap-3 p-3 rounded-2xl border-2 transition text-left">
+                    <div class="w-9 h-9 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-base shrink-0">
+                        <i class="fa-solid fa-clipboard-check"></i>
+                    </div>
+                    <div class="overflow-hidden">
+                        <div class="font-extrabold text-xs sm:text-sm text-slate-800 truncate">Тест</div>
+                        <div class="text-[11px] text-slate-500 truncate">Оценка + История</div>
+                    </div>
+                </button>
+
+                <button onclick="app.switchTab('dictionary')" id="nav-tab-dictionary" class="col-span-2 sm:col-span-1 flex items-center gap-3 p-3 rounded-2xl border-2 transition text-left">
+                    <div class="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center text-base shrink-0">
+                        <i class="fa-solid fa-list-ul"></i>
+                    </div>
+                    <div class="overflow-hidden">
+                        <div class="font-extrabold text-xs sm:text-sm text-slate-800 truncate">Словарь</div>
+                        <div class="text-[11px] text-slate-500 truncate">Все слова и аудио</div>
+                    </div>
+                </button>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 1: FLASHCARDS (КАРТОЧКИ) ==================== -->
+        <section id="panel-flashcards" class="space-y-6">
+            <!-- Flashcard Filter & Controls Bar -->
+            <div class="bg-white px-5 py-3.5 rounded-2xl shadow-sm border border-indigo-100 flex flex-wrap items-center justify-between gap-3">
+                <!-- Filter Pills -->
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="text-xs font-bold text-slate-400 mr-1">Фильтр:</span>
+                    <button onclick="app.setFlashcardFilter('all')" id="fc-filter-all" class="text-xs font-extrabold px-3 py-1.5 rounded-xl transition">
+                        Все слова (<span id="fcCountAll">0</span>)
+                    </button>
+                    <button onclick="app.setFlashcardFilter('learning')" id="fc-filter-learning" class="text-xs font-extrabold px-3 py-1.5 rounded-xl transition">
+                        ⏳ Еще учу (<span id="fcCountLearning">0</span>)
+                    </button>
+                    <button onclick="app.setFlashcardFilter('known')" id="fc-filter-known" class="text-xs font-extrabold px-3 py-1.5 rounded-xl transition">
+                        ✅ Знаю (<span id="fcCountKnown">0</span>)
+                    </button>
+                    <button onclick="app.setFlashcardFilter('starred')" id="fc-filter-starred" class="text-xs font-extrabold px-3 py-1.5 rounded-xl transition">
+                        ⭐ Избранные (<span id="fcCountStarred">0</span>)
+                    </button>
+                </div>
+
+                <!-- Shuffle & Speak All Buttons -->
+                <div class="flex items-center gap-2">
+                    <button onclick="app.toggleShuffleFlashcards()" id="fcShuffleBtn" class="text-xs font-bold px-3.5 py-2 rounded-xl border transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-shuffle"></i>
+                        <span id="fcShuffleLabel">Перемешать</span>
+                    </button>
+                    <button onclick="app.speakAllWordsSequential()" id="speakAllHeaderBtn" class="text-xs font-bold px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-headphones"></i>
+                        <span id="speakAllHeaderLabel">Озвучить весь список</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3D Flashcard Stage -->
+            <div class="max-w-3xl mx-auto">
+                <div id="fcEmptyNotice" class="hidden bg-white rounded-3xl p-10 text-center shadow-card border border-indigo-100 space-y-4">
+                    <div class="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center text-3xl mx-auto">
+                        <i class="fa-solid fa-filter-circle-xmark"></i>
+                    </div>
+                    <h3 class="font-display font-extrabold text-xl text-slate-800">Нет карточек в выбранном фильтре</h3>
+                    <p class="text-sm text-slate-500">Переключите фильтр на «Все слова» или добавьте новые слова из PDF</p>
+                    <div class="flex justify-center gap-3">
+                        <button onclick="app.setFlashcardFilter('all')" class="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-sm">Показать все карточки</button>
+                        <button onclick="app.openPdfModal()" class="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-900 font-bold text-sm">Импорт из PDF</button>
+                    </div>
+                </div>
+
+                <div id="fcStageContainer">
+                    <div id="flashcardStageWrapper" class="perspective-1000 w-full h-80 sm:h-96 cursor-pointer select-none" onclick="app.flipFlashcard()">
+                        <div id="flashcardInner" class="transform-style-3d relative w-full h-full">
+                            
+                            <!-- FRONT SIDE (ENGLISH) -->
+                            <div class="backface-hidden absolute inset-0 bg-white rounded-3xl shadow-card border-2 border-indigo-100 p-6 sm:p-10 flex flex-col justify-between">
+                                <div class="flex items-center justify-between gap-2" onclick="event.stopPropagation()">
+                                    <div class="flex items-center gap-2">
+                                        <span class="bg-indigo-100 text-indigo-700 text-xs font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">🇬🇧 English</span>
+                                        <span id="fcStatusBadge" class="text-xs font-extrabold px-3 py-1 rounded-full"></span>
+                                    </div>
+                                    <div class="flex items-center gap-1.5">
+                                        <button id="fcSpeakNormalBtn" onclick="app.speakCurrentFlashcard(1.0)" class="px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center gap-1.5 transition" title="Озвучить в обычном темпе (клавиша S)">
+                                            <i class="fa-solid fa-volume-high text-sm"></i>
+                                            <span>Озвучить</span>
+                                        </button>
+                                        <button onclick="app.speakCurrentFlashcard(0.68)" class="px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs flex items-center gap-1 transition" title="Медленная озвучка 0.7x">
+                                            <span>🐢</span>
+                                            <span class="hidden sm:inline">0.7x</span>
+                                        </button>
+                                        <button id="fcStarBtn" onclick="app.toggleCurrentFlashcardStar()" class="w-9 h-9 rounded-xl flex items-center justify-center transition" title="В избранное">
+                                            <i class="fa-solid fa-star"></i>
+                                        </button>
+                                        <button onclick="app.editCurrentFlashcard()" class="w-9 h-9 rounded-xl bg-slate-100 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 flex items-center justify-center transition" title="Редактировать карточку">
+                                            <i class="fa-solid fa-pen text-xs"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="text-center my-auto px-4">
+                                    <div id="fcTermText" class="font-display font-extrabold text-3xl sm:text-5xl text-slate-800 tracking-tight break-words">Word</div>
+                                    <div id="fcPhoneticText" class="text-sm sm:text-base text-indigo-500 font-semibold mt-2"></div>
+                                </div>
+
+                                <div class="flex items-center justify-between text-xs text-slate-400">
+                                    <span>Карточка <strong id="fcCounterText" class="text-slate-700">1 / 1</strong></span>
+                                    <span class="text-indigo-500 font-semibold flex items-center gap-1.5">
+                                        <i class="fa-solid fa-rotate"></i> Нажмите или Пробел для переворота
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- BACK SIDE (RUSSIAN TRANSLATION) -->
+                            <div class="backface-hidden rotate-y-180 absolute inset-0 bg-gradient-to-br from-[#4255FF] via-[#5851F5] to-[#7C3AED] text-white rounded-3xl shadow-card p-6 sm:p-10 flex flex-col justify-between">
+                                <div class="flex items-center justify-between" onclick="event.stopPropagation()">
+                                    <span class="bg-white/20 backdrop-blur-sm text-white text-xs font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">🇷🇺 Перевод</span>
+                                    <div class="flex items-center gap-2">
+                                        <button onclick="app.speakCurrentFlashcard(1.0)" class="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white font-bold text-xs flex items-center gap-1.5 transition">
+                                            <i class="fa-solid fa-volume-high"></i>
+                                            <span id="fcBackTermBtnText">Speak</span>
+                                        </button>
+                                        <button onclick="app.speakCurrentFlashcard(0.68)" class="px-2.5 py-2 rounded-xl bg-amber-400/25 hover:bg-amber-400/40 text-amber-200 font-bold text-xs transition">
+                                            🐢 0.7x
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="text-center my-auto px-4">
+                                    <div id="fcDefText" class="font-display font-extrabold text-2xl sm:text-4xl leading-snug break-words">Перевод</div>
+                                    <div id="fcExampleText" class="text-xs sm:text-sm text-indigo-100 mt-4 italic"></div>
+                                </div>
+
+                                <div class="flex items-center justify-between text-xs text-indigo-200">
+                                    <span>Нажмите для возврата к слову</span>
+                                    <span>Оригинал: <strong id="fcBackOrigWord" class="text-white"></strong></span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <!-- Card Progress Bar -->
+                    <div class="w-full bg-indigo-100 h-2.5 rounded-full overflow-hidden mt-5">
+                        <div id="fcPositionBar" class="bg-gradient-to-r from-[#4255FF] to-[#10B981] h-full transition-all duration-300" style="width: 10%"></div>
+                    </div>
+
+                    <!-- Flashcard Action Controls -->
+                    <div class="flex flex-wrap items-center justify-between gap-3 mt-5">
+                        <button onclick="app.prevFlashcard()" class="px-4 py-3 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 font-bold text-sm shadow-sm border border-slate-200 flex items-center gap-2 transition">
+                            <i class="fa-solid fa-chevron-left"></i>
+                            <span class="hidden sm:inline">Назад</span>
+                        </button>
+
+                        <div class="flex items-center gap-3">
+                            <button onclick="app.markCurrentFlashcard('learning')" class="px-5 sm:px-6 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-sm shadow-btn-amber active:translate-y-0.5 flex items-center gap-2 transition">
+                                <span>⏳ Еще учу</span>
+                            </button>
+
+                            <button onclick="app.markCurrentFlashcard('known')" class="px-5 sm:px-6 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-sm shadow-btn-emerald active:translate-y-0.5 flex items-center gap-2 transition">
+                                <span>✅ Знаю!</span>
+                            </button>
+                        </div>
+
+                        <button onclick="app.nextFlashcard()" class="px-4 py-3 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 font-bold text-sm shadow-sm border border-slate-200 flex items-center gap-2 transition">
+                            <span class="hidden sm:inline">Далее</span>
+                            <i class="fa-solid fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 2: LEARN MODE (ЗАУЧИВАНИЕ) ==================== -->
+        <section id="panel-learn" class="hidden">
+            <div class="max-w-3xl mx-auto bg-white rounded-3xl p-6 sm:p-8 shadow-card border border-indigo-100 space-y-6">
+                <!-- Learn Mode Header & Stats -->
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                    <div class="flex items-center gap-3">
+                        <div class="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-brain"></i>
+                        </div>
+                        <div>
+                            <h2 class="font-display font-extrabold text-lg sm:text-xl text-slate-800">Режим «Заучивание»</h2>
+                            <p id="learnCounterLabel" class="text-xs text-slate-500">Прогресс раунда сохраняется автоматически</p>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="learnModeTypeSelect" onchange="app.changeLearnQuestionMode(this.value)" class="px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700">
+                            <option value="mixed">🔄 Микс (Тест + Письмо)</option>
+                            <option value="choice">🔢 Только выбор из 4</option>
+                            <option value="written">⌨️ Только ввод с клавиатуры</option>
+                        </select>
+
+                        <span class="text-xs font-extrabold px-3 py-1.5 rounded-xl bg-amber-100 text-amber-800">
+                            🔥 Серия: <span id="learnStreakCount">0</span>
+                        </span>
+                        <span class="text-xs font-extrabold px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800">
+                            ✅ Верно: <span id="learnCorrectCount">0</span>
+                        </span>
+                        <span class="text-xs font-extrabold px-3 py-1.5 rounded-xl bg-rose-100 text-rose-800">
+                            ❌ Ошибок: <span id="learnWrongCount">0</span>
+                        </span>
+                        <button onclick="app.startNewLearnRound()" class="text-xs font-bold px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition" title="Начать новый раунд заучивания">
+                            <i class="fa-solid fa-rotate-right mr-1"></i>Заново
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Learn Progress Bar -->
+                <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                    <div id="learnProgressBar" class="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+
+                <!-- Learn Question Stage -->
+                <div id="learnStageContainer"></div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 3: MATCH GAME (ПОДБОР НА ВРЕМЯ + РЕКОРДЫ) ==================== -->
+        <section id="panel-match" class="hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                <!-- Match Game Board (8 cols) -->
+                <div class="lg:col-span-8 bg-white rounded-3xl p-6 shadow-card border border-indigo-100">
+                    <div class="flex flex-wrap items-center justify-between gap-4 mb-5">
+                        <div>
+                            <h2 class="font-display font-extrabold text-xl text-slate-800 flex items-center gap-2">
+                                <i class="fa-solid fa-puzzle-piece text-amber-500"></i>
+                                Игра «Подбор» — соедините пары на время!
+                            </h2>
+                            <p class="text-xs text-slate-500">Нажимайте на английское слово и его перевод. За ошибку начисляется штраф +1 сек.</p>
+                        </div>
+
+                        <div class="flex items-center gap-3">
+                            <div class="bg-indigo-50 border border-indigo-200 px-4 py-2 rounded-2xl flex items-center gap-2">
+                                <i class="fa-solid fa-stopwatch text-indigo-600 text-lg"></i>
+                                <span id="matchTimerDisplay" class="font-mono font-extrabold text-xl text-indigo-700">0.0 сек</span>
+                            </div>
+                            <button onclick="app.startMatchGame()" class="px-4 py-2.5 rounded-2xl bg-[#4255FF] hover:bg-indigo-700 text-white font-extrabold text-xs sm:text-sm shadow-md transition flex items-center gap-2">
+                                <i class="fa-solid fa-play"></i>
+                                <span>Новая игра</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="matchGridContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 min-h-[340px]"></div>
+                </div>
+
+                <!-- Match Leaderboard (Top 5 Saved in localStorage) -->
+                <div class="lg:col-span-4 bg-white rounded-3xl p-6 shadow-card border border-indigo-100 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-display font-extrabold text-lg text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-trophy text-amber-500"></i>
+                            Таблица рекордов (Топ-5)
+                        </h3>
+                        <span class="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">В памяти</span>
+                    </div>
+                    <p class="text-xs text-slate-500">Ваши лучшие результаты сохраняются в браузере даже после перезагрузки страницы:</p>
+
+                    <div id="matchLeaderboardList" class="space-y-2.5"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 4: TEST MODE (ТЕСТ + ИСТОРИЯ) ==================== -->
+        <section id="panel-test" class="hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                <!-- Test Questions Column -->
+                <div class="lg:col-span-8 space-y-5">
+                    <div class="bg-white rounded-3xl p-6 shadow-card border border-indigo-100 flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                            <h2 class="font-display font-extrabold text-xl text-slate-800 flex items-center gap-2">
+                                <i class="fa-solid fa-clipboard-check text-purple-600"></i>
+                                Проверочный тест по словарю
+                            </h2>
+                            <p class="text-xs text-slate-500">Включает вопросы «Верно/Неверно», выбор ответа и письменный ввод на английском</p>
+                        </div>
+                        <button onclick="app.generateNewTest()" class="px-4 py-2.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-800 font-extrabold text-xs flex items-center gap-2 transition">
+                            <i class="fa-solid fa-shuffle"></i>
+                            <span>Создать новый вариант</span>
+                        </button>
+                    </div>
+
+                    <!-- Test Result Banner -->
+                    <div id="testResultBanner" class="hidden bg-gradient-to-r from-[#4255FF] to-[#7C3AED] rounded-3xl p-6 text-white shadow-card"></div>
+
+                    <!-- Questions List -->
+                    <div id="testQuestionsContainer" class="space-y-4"></div>
+
+                    <div class="text-center pt-2">
+                        <button id="submitTestBtn" onclick="app.submitCurrentTest()" class="px-8 py-4 rounded-2xl bg-gradient-to-r from-[#4255FF] to-[#7C3AED] hover:opacity-95 text-white font-extrabold text-sm sm:text-base shadow-lg transition">
+                            <i class="fa-solid fa-check-double mr-2"></i>Проверить ответы и сохранить результат
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Saved Test History Column -->
+                <div class="lg:col-span-4 bg-white rounded-3xl p-6 shadow-card border border-indigo-100 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-display font-extrabold text-lg text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-clock-rotate-left text-purple-600"></i>
+                            История тестов
+                        </h3>
+                        <span id="testBestBadge" class="text-xs font-extrabold px-2.5 py-1 rounded-full bg-purple-100 text-purple-700">Лучший: —</span>
+                    </div>
+                    <p class="text-xs text-slate-500">Все пройденные тесты автоматически записываются в `localStorage`:</p>
+                    <div id="testHistoryList" class="space-y-2.5"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 5: FULL DICTIONARY & AUDIO LIST ==================== -->
+        <section id="panel-dictionary" class="hidden space-y-6">
+            <div class="bg-white rounded-3xl p-6 shadow-card border border-indigo-100 space-y-5">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <h2 class="font-display font-extrabold text-xl text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-book text-indigo-600"></i>
+                            Полный словарь (<span id="dictCountLabel">0</span> слов)
+                        </h2>
+                        <p class="text-xs text-slate-500">Все слова, статусы и переводы автоматически сохраняются в памяти браузера</p>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="app.speakAllWordsSequential()" id="speakAllDictBtn" class="px-4 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs flex items-center gap-2 transition">
+                            <i class="fa-solid fa-headphones"></i>
+                            <span>Озвучить весь список подряд</span>
+                        </button>
+                        <button onclick="app.openWordModal()" class="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-plus"></i>
+                            <span>Добавить слово</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Search & Status Filter in Dictionary -->
+                <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                    <div class="sm:col-span-7 relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input id="dictSearchInput" oninput="app.renderDictionaryList()" type="text" placeholder="Поиск по английскому слову или переводу..." class="w-full pl-11 pr-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div class="sm:col-span-5 flex items-center gap-2">
+                        <select id="dictStatusFilter" onchange="app.renderDictionaryList()" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700">
+                            <option value="all">Все статусы слов</option>
+                            <option value="learning">⏳ Только «Еще учу»</option>
+                            <option value="known">✅ Только «Знаю»</option>
+                            <option value="new">🆕 Только новые</option>
+                            <option value="starred">⭐ Только избранные</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Dictionary Rows -->
+                <div id="dictionaryListContainer" class="divide-y divide-slate-100"></div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ==================== MODAL 1: ADD / EDIT WORD ==================== -->
+    <div id="wordModal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-indigo-100 overflow-hidden">
+            <div class="bg-gradient-to-r from-[#4255FF] to-[#7C3AED] px-6 py-4 text-white flex items-center justify-between">
+                <h3 id="wordModalTitle" class="font-display font-extrabold text-lg">Добавить новое слово</h3>
+                <button onclick="app.closeWordModal()" class="w-8 h-8 rounded-xl bg-white/15 hover:bg-white/25 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="text-xs font-extrabold uppercase text-slate-500 block mb-1">Английское слово или фраза *</label>
+                    <div class="flex gap-2">
+                        <input id="wordInputTerm" type="text" placeholder="Например: resilient" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <button onclick="app.speakText(document.getElementById('wordInputTerm').value)" class="px-3.5 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs" title="Прослушать">
+                            <i class="fa-solid fa-volume-high"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-xs font-extrabold uppercase text-slate-500 block mb-1">Перевод на русский *</label>
+                    <input id="wordInputDef" type="text" placeholder="Например: жизнестойкий, быстро восстанавливающийся" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-extrabold uppercase text-slate-500 block mb-1">Транскрипция (необязательно)</label>
+                        <input id="wordInputPhonetic" type="text" placeholder="[rɪˈzɪliənt]" class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs">
+                    </div>
+                    <div>
+                        <label class="text-xs font-extrabold uppercase text-slate-500 block mb-1">Статус изучения</label>
+                        <select id="wordInputStatus" class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold">
+                            <option value="learning">⏳ Еще учу</option>
+                            <option value="known">✅ Знаю</option>
+                            <option value="new">🆕 Новое слово</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-xs font-extrabold uppercase text-slate-500 block mb-1">Пример предложения (необязательно)</label>
+                    <input id="wordInputExample" type="text" placeholder="She is resilient in difficult situations." class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs">
+                </div>
+            </div>
+
+            <div class="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+                <button onclick="app.closeWordModal()" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-200 font-bold text-xs sm:text-sm">Отмена</button>
+                <button onclick="app.saveWordFromModal()" class="px-6 py-2.5 rounded-xl bg-[#4255FF] hover:bg-indigo-700 text-white font-extrabold text-xs sm:text-sm shadow-md">
+                    💾 Сохранить в память
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL 2: PDF IMPORT & SMART PARSER ==================== -->
+    <div id="pdfModal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-3xl max-w-4xl w-full shadow-2xl border border-indigo-100 overflow-hidden my-8 max-h-[92vh] flex flex-col">
+            <div class="bg-gradient-to-r from-[#4255FF] to-[#7C3AED] px-6 py-4 text-white flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-2xl bg-amber-400 text-slate-900 flex items-center justify-center font-bold text-lg">
+                        <i class="fa-solid fa-file-pdf"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-display font-extrabold text-base sm:text-lg">Импорт слов из PDF-файла с автосохранением</h3>
+                        <p class="text-xs text-indigo-100">Умное распознавание пар «Английский — Русский» и предпросмотр с озвучкой</p>
+                    </div>
+                </div>
+                <button onclick="app.closePdfModal()" class="w-8 h-8 rounded-xl bg-white/15 hover:bg-white/25 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="p-6 overflow-y-auto space-y-5 flex-1">
+                <!-- Upload PDF or Load Demo Text -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                    <label for="pdfFileInput" class="md:col-span-8 border-2 border-dashed border-indigo-300 hover:border-indigo-500 bg-indigo-50/50 hover:bg-indigo-50 rounded-2xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition">
+                        <input id="pdfFileInput" type="file" accept=".pdf,.txt,.csv" class="hidden" onchange="app.handlePdfFileUpload(event)">
+                        <div class="w-11 h-11 rounded-2xl bg-[#4255FF] text-white flex items-center justify-center text-lg mb-2 shadow">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                        </div>
+                        <span class="font-bold text-sm text-slate-800">Нажмите, чтобы выбрать PDF-файл со словами</span>
+                        <span class="text-xs text-slate-500 mt-0.5">Поддерживаются любые `.pdf`, `.txt` и `.csv` файлы</span>
+                        <span id="pdfUploadStatus" class="text-xs font-extrabold text-indigo-600 mt-2 hidden"></span>
+                    </label>
+
+                    <div class="md:col-span-4 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col justify-between">
+                        <div>
+                            <span class="text-xs font-extrabold uppercase text-amber-800 block">✨ Быстрая проверка</span>
+                            <p class="text-xs text-amber-900/80 mt-1">Загрузите готовый отрывок из PDF-словаря, чтобы проверить парсер и озвучку:</p>
+                        </div>
+                        <button onclick="app.loadDemoPdfText()" class="mt-3 w-full py-2.5 px-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-extrabold text-xs shadow-sm transition">
+                            Загрузить демо-текст из PDF
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Raw Text & Parser Controls -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                    <div class="lg:col-span-8 space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <label class="text-xs font-extrabold uppercase text-slate-500">Текст из PDF (можно вставить свой список):</label>
+                            <button onclick="document.getElementById('pdfRawTextarea').value=''; app.parsePdfText();" class="text-xs font-bold text-rose-500 hover:underline">Очистить</button>
+                        </div>
+                        <textarea id="pdfRawTextarea" oninput="app.parsePdfText()" rows="5" placeholder="Пример строк:&#10;resilient [rɪˈzɪliənt] — жизнестойкий, упругий&#10;inevitable - неизбежный&#10;ambiguous двусмысленный" class="w-full p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                    </div>
+
+                    <div class="lg:col-span-4 bg-slate-50 rounded-2xl p-4 border border-slate-200 flex flex-col justify-between space-y-3">
+                        <div class="space-y-2.5">
+                            <label class="text-xs font-extrabold uppercase text-slate-500 block">Настройки парсера:</label>
+                            <select id="pdfDelimiterSelect" onchange="app.parsePdfText()" class="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold">
+                                <option value="auto">✨ Авто (Тире / Таб / Латиница+Кириллица)</option>
+                                <option value="dash">Тире или дефис ( - , — )</option>
+                                <option value="colon">Двоеточие ( : ) или ( ; )</option>
+                                <option value="tab">Табуляция (Tab)</option>
+                            </select>
+
+                            <button onclick="app.swapParsedPdfColumns()" class="w-full py-2 px-3 rounded-xl bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold text-xs transition">
+                                <i class="fa-solid fa-right-left mr-1"></i>Поменять местами EN ⇄ RU
+                            </button>
+                        </div>
+
+                        <label class="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer pt-2 border-t border-slate-200">
+                            <input id="pdfReplaceExistingCheck" type="checkbox" class="rounded text-indigo-600">
+                            <span>Заменить текущий словарь этими словами</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Interactive Preview List -->
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-extrabold text-xs sm:text-sm text-slate-800">
+                            Распознано пар для сохранения: <span id="pdfParsedCount" class="text-indigo-600">0</span>
+                        </span>
+                        <button onclick="app.addEmptyParsedPdfRow()" class="text-xs font-bold text-indigo-600 hover:underline">+ Добавить строку</button>
+                    </div>
+                    <div id="pdfPreviewRows" class="max-h-56 overflow-y-auto space-y-2 pr-1"></div>
+                </div>
+            </div>
+
+            <div class="bg-slate-50 px-6 py-4 border-t border-slate-200 flex items-center justify-between">
+                <button onclick="app.closePdfModal()" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-200 font-bold text-xs sm:text-sm">Отмена</button>
+                <button onclick="app.confirmPdfImport()" class="px-6 py-3 rounded-2xl bg-gradient-to-r from-[#4255FF] to-[#7C3AED] text-white font-extrabold text-xs sm:text-sm shadow-lg flex items-center gap-2">
+                    <i class="fa-solid fa-floppy-disk"></i>
+                    <span>Сохранить слова в память и учить</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL 3: BACKUP (JSON EXPORT/IMPORT) & RESET ==================== -->
+    <div id="backupModal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-indigo-100 overflow-hidden">
+            <div class="bg-gradient-to-r from-slate-800 to-indigo-950 px-6 py-4 text-white flex items-center justify-between">
+                <h3 class="font-display font-extrabold text-lg flex items-center gap-2">
+                    <i class="fa-solid fa-database text-amber-400"></i>
+                    Управление памятью и резервная копия
+                </h3>
+                <button onclick="app.closeBackupModal()" class="w-8 h-8 rounded-xl bg-white/15 hover:bg-white/25 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-5">
+                <div class="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-1">
+                    <div class="font-extrabold flex items-center gap-1.5 text-sm">
+                        <i class="fa-solid fa-circle-check text-emerald-600"></i>
+                        Автосохранение активно (`localStorage`)
+                    </div>
+                    <p>Все ваши слова, статусы «Знаю / Еще учу», рекорды игры «Подбор» и настройки озвучки мгновенно сохраняются в браузере и не пропадают при нажатии F5.</p>
+                </div>
+
+                <div class="space-y-2.5">
+                    <h4 class="font-extrabold text-xs uppercase text-slate-500">Экспорт и импорт файла словаря (JSON)</h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button onclick="app.exportJsonBackup()" class="p-3.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs flex items-center justify-center gap-2 border border-indigo-200 transition">
+                            <i class="fa-solid fa-download text-base"></i>
+                            <span>Скачать словарь (.json)</span>
+                        </button>
+
+                        <label class="p-3.5 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-900 font-extrabold text-xs flex items-center justify-center gap-2 border border-amber-200 cursor-pointer transition">
+                            <i class="fa-solid fa-upload text-base"></i>
+                            <span>Загрузить из (.json)</span>
+                            <input type="file" accept=".json" class="hidden" onchange="app.importJsonBackup(event)">
+                        </label>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-slate-200 space-y-2.5">
+                    <h4 class="font-extrabold text-xs uppercase text-rose-600">Сброс прогресса или восстановление демо-словаря</h4>
+                    <div class="flex flex-wrap gap-2.5">
+                        <button onclick="app.resetLearningProgressOnly()" class="flex-1 py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition">
+                            Сбросить только прогресс и рекорды
+                        </button>
+                        <button onclick="app.restoreFactoryDefaults()" class="flex-1 py-2.5 px-3 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-xs transition">
+                            Полный сброс к исходным словам
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATIONS CONTAINER -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- ==================== APPLICATION LOGIC ==================== -->
+    <script>
+        if (window.pdfjsLib) {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+
+        const STORAGE_KEY = 'lexicards_pro_complete_state_v2';
+
+        const DEFAULT_WORDS = [
+            { id: 'w1', term: 'resilient', definition: 'жизнестойкий, быстро восстанавливающийся', phonetic: '[rɪˈzɪliənt]', example: 'Athletes must be resilient after tough workouts.', status: 'known', mastery: 2, starred: true },
+            { id: 'w2', term: 'deprecated', definition: 'устаревший (не рекомендуемый к использованию в коде)', phonetic: '[ˈdeprəkeɪtɪd]', example: 'This method is deprecated in the latest release.', status: 'learning', mastery: 1, starred: true },
+            { id: 'w3', term: 'scalability', definition: 'масштабируемость (системы или приложения)', phonetic: '[ˌskeɪləˈbɪləti]', example: 'Cloud architecture improves system scalability.', status: 'learning', mastery: 0, starred: false },
+            { id: 'w4', term: 'bottleneck', definition: 'узкое место (снижающее производительность)', phonetic: '[ˈbɒtlnek]', example: 'Slow database queries were the main bottleneck.', status: 'learning', mastery: 1, starred: true },
+            { id: 'w5', term: 'inevitable', definition: 'неизбежный, неминуемый', phonetic: '[ɪnˈevɪtəbl]', example: 'Change is an inevitable part of software engineering.', status: 'known', mastery: 2, starred: false },
+            { id: 'w6', term: 'ambiguous', definition: 'двусмысленный, неоднозначный', phonetic: '[æmˈbɪɡjuəs]', example: 'Avoid ambiguous variable names in your code.', status: 'learning', mastery: 0, starred: false },
+            { id: 'w7', term: 'figure out', definition: 'разгадать, понять, разобраться', phonetic: '[ˈfɪɡər aʊt]', example: 'We need to figure out how to optimize this algorithm.', status: 'known', mastery: 2, starred: true },
+            { id: 'w8', term: 'ubiquitous', definition: 'вездесущий, повсеместный', phonetic: '[juːˈbɪkwɪtəs]', example: 'Mobile devices have become ubiquitous.', status: 'learning', mastery: 0, starred: false },
+            { id: 'w9', term: 'immutable', definition: 'неизменяемый (объект или тип данных)', phonetic: '[ɪˈmjuːtəbl]', example: 'Strings and tuples in Python are immutable.', status: 'known', mastery: 2, starred: false },
+            { id: 'w10', term: 'mitigate', definition: 'смягчать, уменьшать (риск или последствия)', phonetic: '[ˈmɪtɪɡeɪt]', example: 'Backups help mitigate the risk of data loss.', status: 'learning', mastery: 0, starred: false },
+            { id: 'w11', term: 'latency', definition: 'задержка, время отклика в сети', phonetic: '[ˈleɪtənsi]', example: 'Low latency is essential for online games.', status: 'learning', mastery: 1, starred: false },
+            { id: 'w12', term: 'come up with', definition: 'придумать, предложить (идею или решение)', phonetic: '[kʌm ʌp wɪð]', example: 'She came up with a clever solution.', status: 'learning', mastery: 0, starred: false }
+        ];
+
+        const app = {
+            // Persistent State Object (Everything inside `state` is saved to localStorage)
+            state: {
+                words: [],
+                activeTab: 'flashcards',
+                tts: {
+                    accent: 'en-US',
+                    rate: 1.0,
+                    autoSpeak: true
+                },
+                flashcards: {
+                    index: 0,
+                    filter: 'all', // 'all' | 'learning' | 'known' | 'starred'
+                    shuffled: false,
+                    shuffledIds: []
+                },
+                learn: {
+                    modeType: 'mixed', // 'mixed' | 'choice' | 'written'
+                    queue: [],
+                    currentIndex: 0,
+                    correctCount: 0,
+                    wrongCount: 0,
+                    streak: 0,
+                    bestStreak: 0
+                },
+                match: {
+                    leaderboard: [] // [{ time: 12.4, date: '05.11.2026, 14:20', pairs: 6 }]
+                },
+                test: {
+                    bestScorePct: null,
+                    history: [], // [{ scorePct: 90, correct: 9, total: 10, date: '...' }]
+                    currentQuestions: [],
+                    submitted: false
+                }
+            },
+
+            // Runtime transient variables
+            fcFlipped: false,
+            isSpeakingAll: false,
+            editingWordId: null,
+            parsedPdfRows: [],
+            matchTiles: [],
+            matchSelectedTile: null,
+            matchStartTime: 0,
+            matchPenalty: 0,
+            matchRemainingPairs: 0,
+            matchTimerId: null,
+
+            init() {
+                this.loadFromStorage();
+                this.syncHeaderControls();
+                this.updateDashboardStats();
+                this.switchTab(this.state.activeTab || 'flashcards', false);
+                this.setupKeyboardShortcuts();
+            },
+
+            // ==================== LOCALSTORAGE PERSISTENCE ====================
+            loadFromStorage() {
+                try {
+                    const raw = localStorage.getItem(STORAGE_KEY);
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && Array.isArray(parsed.words) && parsed.words.length > 0) {
+                            this.state = {
+                                ...this.state,
+                                ...parsed,
+                                tts: { ...this.state.tts, ...(parsed.tts || {}) },
+                                flashcards: { ...this.state.flashcards, ...(parsed.flashcards || {}) },
+                                learn: { ...this.state.learn, ...(parsed.learn || {}) },
+                                match: { ...this.state.match, ...(parsed.match || {}) },
+                                test: { ...this.state.test, ...(parsed.test || {}) }
+                            };
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Error loading state from localStorage:', e);
+                }
+
+                // Initialize with default rich vocabulary if empty
+                this.state.words = JSON.parse(JSON.stringify(DEFAULT_WORDS));
+                this.saveToStorage(false);
+            },
+
+            saveToStorage(animateIndicator = true) {
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
+                    if (animateIndicator) {
+                        const dot = document.getElementById('saveStatusDot');
+                        const txt = document.getElementById('saveStatusText');
+                        if (dot && txt) {
+                            const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                            txt.textContent = `💾 Сохранено в памяти браузера (${now})`;
+                            dot.classList.add('scale-150', 'bg-amber-300');
+                            setTimeout(() => dot.classList.remove('scale-150', 'bg-amber-300'), 450);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('localStorage save error:', e);
+                }
+                this.updateDashboardStats();
+            },
+
+            // ==================== VOICE / TEXT-TO-SPEECH ====================
+            syncHeaderControls() {
+                const { accent, rate, autoSpeak } = this.state.tts;
+                document.getElementById('voiceAccentSelect').value = accent;
+                document.getElementById('voiceAccentSelectMobile').value = accent;
+
+                const isSlow = rate < 1.0;
+                document.getElementById('speedIcon').textContent = isSlow ? '🐢' : '🐇';
+                document.getElementById('speedLabel').textContent = isSlow ? '0.7x' : '1.0x';
+                document.getElementById('speedToggleBtnMobile').textContent = isSlow ? '🐢 0.7x' : '🐇 1.0x';
+
+                const autoTxt = `Авто: ${autoSpeak ? 'ВКЛ' : 'ВЫКЛ'}`;
+                document.getElementById('autoSpeakLabel').textContent = autoTxt;
+                document.getElementById('autoSpeakToggleBtnMobile').textContent = `🔊 ${autoTxt}`;
+            },
+
+            setVoiceAccent(accent) {
+                this.state.tts.accent = accent;
+                this.syncHeaderControls();
+                this.saveToStorage();
+                this.speakText(accent === 'en-US' ? 'American English pronunciation' : 'British English pronunciation');
+                this.showToast(`Акцент озвучки: ${accent === 'en-US' ? '🇺🇸 US English' : '🇬🇧 UK English'} сохранен`, 'info');
+            },
+
+            toggleVoiceSpeed() {
+                this.state.tts.rate = this.state.tts.rate === 1.0 ? 0.7 : 1.0;
+                this.syncHeaderControls();
+                this.saveToStorage();
+                this.showToast(this.state.tts.rate < 1.0 ? '🐢 Медленный режим (0.7x) сохранен' : '🐇 Обычная скорость (1.0x) сохранена', 'info');
+            },
+
+            toggleAutoSpeak() {
+                this.state.tts.autoSpeak = !this.state.tts.autoSpeak;
+                this.syncHeaderControls();
+                this.saveToStorage();
+                this.showToast(this.state.tts.autoSpeak ? '🔊 Авто-озвучка карточек включена' : '🔇 Авто-озвучка карточек выключена', 'info');
+            },
+
+            speakText(text, customRate = null, btnEl = null) {
+                if (!('speechSynthesis' in window) || !text) return;
+                window.speechSynthesis.cancel();
+
+                const clean = String(text).replace(/\[.*?\]/g, '').trim();
+                if (!clean) return;
+
+                const utter = new SpeechSynthesisUtterance(clean);
+                utter.lang = this.state.tts.accent;
+                utter.rate = customRate !== null ? customRate : this.state.tts.rate;
+
+                const voices = window.speechSynthesis.getVoices();
+                if (voices.length > 0) {
+                    const preferred = voices.find(v =>
+                        v.lang.replace('_', '-') === this.state.tts.accent &&
+                        (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Siri') || v.name.includes('Samantha') || v.name.includes('Daniel'))
+                    ) || voices.find(v => v.lang.replace('_', '-').startsWith(this.state.tts.accent))
+                      || voices.find(v => v.lang.startsWith('en'));
+                    if (preferred) utter.voice = preferred;
+                }
+
+                const targetBtn = btnEl || document.getElementById('fcSpeakNormalBtn');
+                if (targetBtn) {
+                    targetBtn.classList.add('speaking-active');
+                    utter.onend = () => targetBtn.classList.remove('speaking-active');
+                    utter.onerror = () => targetBtn.classList.remove('speaking-active');
+                }
+
+                window.speechSynthesis.speak(utter);
+            },
+
+            speakAllWordsSequential() {
+                if (this.isSpeakingAll) {
+                    window.speechSynthesis.cancel();
+                    this.isSpeakingAll = false;
+                    document.getElementById('speakAllHeaderLabel').textContent = 'Озвучить весь список';
+                    return;
+                }
+                if (this.state.words.length === 0) return;
+
+                this.isSpeakingAll = true;
+                document.getElementById('speakAllHeaderLabel').textContent = '⏹ Стоп озвучки';
+                let idx = 0;
+
+                const speakNext = () => {
+                    if (!this.isSpeakingAll || idx >= this.state.words.length) {
+                        this.isSpeakingAll = false;
+                        document.getElementById('speakAllHeaderLabel').textContent = 'Озвучить весь список';
+                        return;
+                    }
+                    const item = this.state.words[idx++];
+                    const u = new SpeechSynthesisUtterance(item.term);
+                    u.lang = this.state.tts.accent;
+                    u.rate = this.state.tts.rate;
+                    u.onend = () => setTimeout(speakNext, 650);
+                    u.onerror = () => { this.isSpeakingAll = false; };
+                    window.speechSynthesis.speak(u);
+                };
+                speakNext();
+            },
+
+            // ==================== DASHBOARD STATS & TAB SWITCHING ====================
+            updateDashboardStats() {
+                const total = this.state.words.length;
+                const known = this.state.words.filter(w => w.status === 'known').length;
+                const learning = this.state.words.filter(w => w.status !== 'known').length;
+
+                document.getElementById('statTotalWords').textContent = total;
+                document.getElementById('statKnownWords').textContent = known;
+                document.getElementById('statLearningWords').textContent = learning;
+
+                // Best Match Time
+                const lb = this.state.match.leaderboard || [];
+                document.getElementById('statBestMatch').textContent = lb.length > 0 ? `${lb[0].time.toFixed(1)}с` : '—';
+
+                // Best Test Score
+                const bestTest = this.state.test.bestScorePct;
+                document.getElementById('statBestTest').textContent = bestTest !== null && bestTest !== undefined ? `${bestTest}%` : '—';
+
+                // Mastery Bar
+                const knownPct = total > 0 ? Math.round((known / total) * 100) : 0;
+                const learningPct = total > 0 ? Math.round((learning / total) * 100) : 0;
+                document.getElementById('statMasteryPercent').textContent = `${knownPct}% выучено (${known} из ${total})`;
+                document.getElementById('barKnownPct').style.width = `${knownPct}%`;
+                document.getElementById('barLearningPct').style.width = `${learningPct}%`;
+            },
+
+            switchTab(tabName, saveState = true) {
+                this.stopMatchTimer();
+                this.state.activeTab = tabName;
+                if (saveState) this.saveToStorage();
+
+                const tabs = ['flashcards', 'learn', 'match', 'test', 'dictionary'];
+                tabs.forEach(t => {
+                    const btn = document.getElementById(`nav-tab-${t}`);
+                    const panel = document.getElementById(`panel-${t}`);
+                    if (t === tabName) {
+                        btn.className = 'flex items-center gap-3 p-3 rounded-2xl border-2 border-[#4255FF] bg-indigo-50/80 shadow-sm transition text-left';
+                        panel.classList.remove('hidden');
+                    } else {
+                        btn.className = 'flex items-center gap-3 p-3 rounded-2xl border-2 border-slate-100 hover:border-indigo-200 bg-white transition text-left';
+                        panel.classList.add('hidden');
+                    }
+                });
+
+                if (tabName === 'flashcards') {
+                    this.renderFlashcardsSection();
+                } else if (tabName === 'learn') {
+                    this.initOrResumeLearnMode();
+                } else if (tabName === 'match') {
+                    this.renderMatchLeaderboard();
+                    this.startMatchGame();
+                } else if (tabName === 'test') {
+                    this.initOrResumeTestMode();
+                } else if (tabName === 'dictionary') {
+                    this.renderDictionaryList();
+                }
+            },
+
+            // ==================== MODE 1: FLASHCARDS (КАРТОЧКИ) ====================
+            getFilteredFlashcards() {
+                const { filter, shuffled, shuffledIds } = this.state.flashcards;
+                let list = [...this.state.words];
+
+                if (shuffled && shuffledIds.length > 0) {
+                    const orderMap = new Map(shuffledIds.map((id, i) => [id, i]));
+                    list.sort((a, b) => (orderMap.get(a.id) ?? 999) - (orderMap.get(b.id) ?? 999));
+                }
+
+                if (filter === 'learning') list = list.filter(w => w.status !== 'known');
+                else if (filter === 'known') list = list.filter(w => w.status === 'known');
+                else if (filter === 'starred') list = list.filter(w => w.starred);
+
+                return list;
+            },
+
+            setFlashcardFilter(filterName) {
+                this.state.flashcards.filter = filterName;
+                this.state.flashcards.index = 0;
+                this.fcFlipped = false;
+                this.saveToStorage();
+                this.renderFlashcardsSection();
+            },
+
+            toggleShuffleFlashcards() {
+                this.state.flashcards.shuffled = !this.state.flashcards.shuffled;
+                if (this.state.flashcards.shuffled) {
+                    this.state.flashcards.shuffledIds = this.state.words.map(w => w.id).sort(() => Math.random() - 0.5);
+                    this.showToast('🔀 Карточки перемешаны (порядок сохранен)', 'info');
+                } else {
+                    this.state.flashcards.shuffledIds = [];
+                    this.showToast('Исходный порядок карточек восстановлен', 'info');
+                }
+                this.state.flashcards.index = 0;
+                this.fcFlipped = false;
+                this.saveToStorage();
+                this.renderFlashcardsSection();
+            },
+
+            renderFlashcardsSection() {
+                // Filter counts
+                const allCount = this.state.words.length;
+                const learningCount = this.state.words.filter(w => w.status !== 'known').length;
+                const knownCount = this.state.words.filter(w => w.status === 'known').length;
+                const starredCount = this.state.words.filter(w => w.starred).length;
+
+                document.getElementById('fcCountAll').textContent = allCount;
+                document.getElementById('fcCountLearning').textContent = learningCount;
+                document.getElementById('fcCountKnown').textContent = knownCount;
+                document.getElementById('fcCountStarred').textContent = starredCount;
+
+                // Highlight active filter button
+                ['all', 'learning', 'known', 'starred'].forEach(f => {
+                    const btn = document.getElementById(`fc-filter-${f}`);
+                    if (this.state.flashcards.filter === f) {
+                        btn.className = 'text-xs font-extrabold px-3 py-1.5 rounded-xl bg-[#4255FF] text-white shadow-sm transition';
+                    } else {
+                        btn.className = 'text-xs font-extrabold px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition';
+                    }
+                });
+
+                // Shuffle button style
+                const shufBtn = document.getElementById('fcShuffleBtn');
+                shufBtn.className = this.state.flashcards.shuffled
+                    ? 'text-xs font-extrabold px-3.5 py-2 rounded-xl bg-amber-100 border border-amber-300 text-amber-900 transition flex items-center gap-1.5'
+                    : 'text-xs font-bold px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 transition flex items-center gap-1.5';
+
+                const cards = this.getFilteredFlashcards();
+                const emptyNotice = document.getElementById('fcEmptyNotice');
+                const stageContainer = document.getElementById('fcStageContainer');
+
+                if (cards.length === 0) {
+                    emptyNotice.classList.remove('hidden');
+                    stageContainer.classList.add('hidden');
+                    return;
+                }
+
+                emptyNotice.classList.add('hidden');
+                stageContainer.classList.remove('hidden');
+
+                if (this.state.flashcards.index >= cards.length) {
+                    this.state.flashcards.index = 0;
+                }
+                const card = cards[this.state.flashcards.index];
+
+                // Update 3D card DOM
+                document.getElementById('flashcardInner').classList.toggle('rotate-y-180', this.fcFlipped);
+                document.getElementById('fcTermText').textContent = card.term;
+                document.getElementById('fcPhoneticText').textContent = card.phonetic || '';
+                document.getElementById('fcDefText').textContent = card.definition;
+                document.getElementById('fcExampleText').textContent = card.example ? `Пример: "${card.example}"` : '';
+                document.getElementById('fcBackTermBtnText').textContent = card.term;
+                document.getElementById('fcBackOrigWord').textContent = card.term;
+
+                document.getElementById('fcCounterText').textContent = `${this.state.flashcards.index + 1} / ${cards.length}`;
+                const pct = ((this.state.flashcards.index + 1) / cards.length) * 100;
+                document.getElementById('fcPositionBar').style.width = `${pct}%`;
+
+                // Status Badge
+                const statusBadge = document.getElementById('fcStatusBadge');
+                if (card.status === 'known') {
+                    statusBadge.className = 'text-xs font-extrabold px-3 py-1 rounded-full bg-emerald-100 text-emerald-700';
+                    statusBadge.textContent = '✅ Знаю';
+                } else {
+                    statusBadge.className = 'text-xs font-extrabold px-3 py-1 rounded-full bg-amber-100 text-amber-800';
+                    statusBadge.textContent = '⏳ Еще учу';
+                }
+
+                // Star button
+                const starBtn = document.getElementById('fcStarBtn');
+                starBtn.className = card.starred
+                    ? 'w-9 h-9 rounded-xl bg-amber-100 text-amber-500 flex items-center justify-center transition'
+                    : 'w-9 h-9 rounded-xl bg-slate-100 hover:bg-amber-50 text-slate-400 flex items-center justify-center transition';
+
+                if (this.state.tts.autoSpeak && !this.fcFlipped) {
+                    this.speakText(card.term, null, document.getElementById('fcSpeakNormalBtn'));
+                }
+            },
+
+            flipFlashcard() {
+                this.fcFlipped = !this.fcFlipped;
+                document.getElementById('flashcardInner').classList.toggle('rotate-y-180', this.fcFlipped);
+            },
+
+            speakCurrentFlashcard(rate = null) {
+                const cards = this.getFilteredFlashcards();
+                const card = cards[this.state.flashcards.index];
+                if (card) this.speakText(card.term, rate, document.getElementById('fcSpeakNormalBtn'));
+            },
+
+            nextFlashcard() {
+                const cards = this.getFilteredFlashcards();
+                if (cards.length === 0) return;
+                this.fcFlipped = false;
+                this.state.flashcards.index = (this.state.flashcards.index + 1) % cards.length;
+                this.saveToStorage();
+                this.renderFlashcardsSection();
+            },
+
+            prevFlashcard() {
+                const cards = this.getFilteredFlashcards();
+                if (cards.length === 0) return;
+                this.fcFlipped = false;
+                this.state.flashcards.index = (this.state.flashcards.index - 1 + cards.length) % cards.length;
+                this.saveToStorage();
+                this.renderFlashcardsSection();
+            },
+
+            markCurrentFlashcard(newStatus) {
+                const cards = this.getFilteredFlashcards();
+                const card = cards[this.state.flashcards.index];
+                if (!card) return;
+
+                card.status = newStatus;
+                card.mastery = newStatus === 'known' ? 2 : 0;
+
+                const wrapper = document.getElementById('flashcardStageWrapper');
+                const animClass = newStatus === 'known' ? 'anim-swipe-right' : 'anim-swipe-left';
+                wrapper.classList.add(animClass);
+                setTimeout(() => wrapper.classList.remove(animClass), 420);
+
+                this.fcFlipped = false;
+                const updatedList = this.getFilteredFlashcards();
+                if (updatedList.length > 0) {
+                    this.state.flashcards.index = (this.state.flashcards.index + 1) % updatedList.length;
+                } else {
+                    this.state.flashcards.index = 0;
+                }
+
+                this.saveToStorage();
+                this.renderFlashcardsSection();
+            },
+
+            toggleCurrentFlashcardStar() {
+                const cards = this.getFilteredFlashcards();
+                const card = cards[this.state.flashcards.index];
+                if (!card) return;
+                card.starred = !card.starred;
+                this.saveToStorage();
+                this.renderFlashcardsSection();
+            },
+
+            editCurrentFlashcard() {
+                const cards = this.getFilteredFlashcards();
+                const card = cards[this.state.flashcards.index];
+                if (card) this.openWordModal(card.id);
+            },
+
+            // ==================== MODE 2: LEARN (ЗАУЧИВАНИЕ С ПАМЯТЬЮ ПРОГРЕССА) ====================
+            initOrResumeLearnMode() {
+                document.getElementById('learnModeTypeSelect').value = this.state.learn.modeType || 'mixed';
+                if (!Array.isArray(this.state.learn.queue) || this.state.learn.queue.length === 0) {
+                    this.startNewLearnRound(false);
+                } else {
+                    this.renderLearnQuestion();
+                }
+            },
+
+            changeLearnQuestionMode(modeType) {
+                this.state.learn.modeType = modeType;
+                this.startNewLearnRound();
+            },
+
+            startNewLearnRound(notify = true) {
+                const pool = [...this.state.words].sort((a, b) => {
+                    if (a.status !== b.status) return a.status === 'known' ? 1 : -1;
+                    return Math.random() - 0.5;
+                });
+
+                const modeType = this.state.learn.modeType || 'mixed';
+                this.state.learn.queue = pool.map((w, idx) => {
+                    let qType = 'choice';
+                    if (modeType === 'written') qType = 'written';
+                    else if (modeType === 'mixed') qType = (w.mastery >= 1 || idx % 3 === 2) ? 'written' : 'choice';
+                    return { wordId: w.id, type: qType };
+                });
+
+                this.state.learn.currentIndex = 0;
+                this.state.learn.correctCount = 0;
+                this.state.learn.wrongCount = 0;
+                this.saveToStorage();
+                this.renderLearnQuestion();
+                if (notify) this.showToast('Начат новый раунд заучивания', 'info');
+            },
+
+            renderLearnQuestion() {
+                const { queue, currentIndex, correctCount, wrongCount, streak } = this.state.learn;
+                document.getElementById('learnStreakCount').textContent = streak || 0;
+                document.getElementById('learnCorrectCount').textContent = correctCount || 0;
+                document.getElementById('learnWrongCount').textContent = wrongCount || 0;
+
+                const container = document.getElementById('learnStageContainer');
+                if (queue.length === 0 || currentIndex >= queue.length) {
+                    document.getElementById('learnProgressBar').style.width = '100%';
+                    document.getElementById('learnCounterLabel').textContent = `Раунд завершен! (${queue.length} из ${queue.length})`;
+                    container.innerHTML = `
+                        <div class="text-center py-8 space-y-4">
+                            <div class="w-20 h-20 rounded-3xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-4xl mx-auto">
+                                <i class="fa-solid fa-trophy"></i>
+                            </div>
+                            <h3 class="font-display font-extrabold text-2xl text-slate-800">Раунд заучивания пройден!</h3>
+                            <p class="text-sm text-slate-600">
+                                Верных ответов: <strong class="text-emerald-600">${correctCount}</strong> • Ошибок: <strong class="text-rose-600">${wrongCount}</strong> • Лучшая серия: <strong class="text-amber-600">🔥 ${this.state.learn.bestStreak || streak}</strong>
+                            </p>
+                            <div class="flex flex-wrap justify-center gap-3 pt-2">
+                                <button onclick="app.startNewLearnRound()" class="px-6 py-3 rounded-2xl bg-[#4255FF] hover:bg-indigo-700 text-white font-extrabold text-sm shadow-md">
+                                    Пройти еще один раунд
+                                </button>
+                                <button onclick="app.switchTab('match')" class="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-extrabold text-sm shadow-md">
+                                    Перейти к игре «Подбор»
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const item = queue[currentIndex];
+                const wordObj = this.state.words.find(w => w.id === item.wordId) || this.state.words[0];
+                if (!wordObj) return;
+
+                const pct = Math.round((currentIndex / queue.length) * 100);
+                document.getElementById('learnProgressBar').style.width = `${pct}%`;
+                document.getElementById('learnCounterLabel').textContent = `Вопрос ${currentIndex + 1} из ${queue.length} • Уровень освоения слова: ${wordObj.mastery || 0}/2`;
+
+                if (item.type === 'choice') {
+                    const distractors = this.state.words
+                        .filter(w => w.id !== wordObj.id)
+                        .sort(() => Math.random() - 0.5)
+                        .slice(0, 3)
+                        .map(w => w.definition);
+                    const options = [wordObj.definition, ...distractors].sort(() => Math.random() - 0.5);
+
+                    if (this.state.tts.autoSpeak) this.speakText(wordObj.term);
+
+                    container.innerHTML = `
+                        <div class="space-y-6">
+                            <div class="p-6 rounded-2xl bg-indigo-50/70 border border-indigo-100 flex items-center justify-between gap-4">
+                                <div>
+                                    <span class="text-xs font-extrabold uppercase text-indigo-600">Выберите правильный перевод:</span>
+                                    <div class="font-display font-extrabold text-2xl sm:text-3xl text-slate-800 mt-1">${this.escapeHtml(wordObj.term)}</div>
+                                    ${wordObj.phonetic ? `<div class="text-xs text-indigo-500 mt-0.5">${this.escapeHtml(wordObj.phonetic)}</div>` : ''}
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button onclick="app.speakText('${this.escapeJs(wordObj.term)}', 1.0, this)" class="w-11 h-11 rounded-2xl bg-white hover:bg-indigo-100 text-indigo-600 shadow-sm flex items-center justify-center text-lg transition">
+                                        <i class="fa-solid fa-volume-high"></i>
+                                    </button>
+                                    <button onclick="app.speakText('${this.escapeJs(wordObj.term)}', 0.68, this)" class="w-11 h-11 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-800 shadow-sm flex items-center justify-center text-base transition" title="Медленно 0.7x">
+                                        🐢
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                ${options.map((opt, i) => `
+                                    <button onclick="app.handleLearnChoiceAnswer(this, '${this.escapeJs(opt)}')" class="learn-choice-btn p-4 rounded-2xl border-2 border-slate-200 hover:border-[#4255FF] bg-white text-left font-bold text-sm text-slate-700 transition flex items-center gap-3">
+                                        <span class="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 font-extrabold text-xs flex items-center justify-center shrink-0">${i + 1}</span>
+                                        <span>${this.escapeHtml(opt)}</span>
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // Written Question with Hint button
+                    container.innerHTML = `
+                        <div class="space-y-5">
+                            <div class="p-6 rounded-2xl bg-purple-50/70 border border-purple-100">
+                                <span class="text-xs font-extrabold uppercase text-purple-600">Напишите это слово на английском:</span>
+                                <div class="font-display font-extrabold text-2xl text-slate-800 mt-1">${this.escapeHtml(wordObj.definition)}</div>
+                            </div>
+
+                            <div class="flex flex-col sm:flex-row gap-2.5">
+                                <input id="learnWrittenInput" type="text" autocomplete="off" placeholder="Введите английское слово..." onkeydown="if(event.key==='Enter') app.handleLearnWrittenAnswer()" class="flex-1 px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-[#4255FF] focus:outline-none font-bold text-base">
+                                <button onclick="app.giveLearnLetterHint()" class="px-4 py-3 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-extrabold text-xs shrink-0">
+                                    💡 Подсказка (буква)
+                                </button>
+                                <button onclick="app.handleLearnWrittenAnswer()" class="px-6 py-3.5 rounded-2xl bg-[#4255FF] hover:bg-indigo-700 text-white font-extrabold text-sm shrink-0">
+                                    Ответить
+                                </button>
+                            </div>
+                            <div id="learnFeedbackBox" class="hidden p-4 rounded-2xl text-sm font-bold"></div>
+                        </div>
+                    `;
+                    setTimeout(() => document.getElementById('learnWrittenInput')?.focus(), 50);
+                }
+            },
+
+            handleLearnChoiceAnswer(btnEl, selectedDef) {
+                const item = this.state.learn.queue[this.state.learn.currentIndex];
+                const wordObj = this.state.words.find(w => w.id === item?.wordId);
+                if (!wordObj) return;
+
+                document.querySelectorAll('.learn-choice-btn').forEach(b => b.disabled = true);
+                const isCorrect = selectedDef === wordObj.definition;
+
+                if (isCorrect) {
+                    btnEl.className = 'p-4 rounded-2xl border-2 border-emerald-500 bg-emerald-50 text-left font-extrabold text-sm text-emerald-800 flex items-center gap-3';
+                    this.recordLearnResult(wordObj, true);
+                } else {
+                    btnEl.className = 'p-4 rounded-2xl border-2 border-rose-500 bg-rose-50 text-left font-extrabold text-sm text-rose-800 flex items-center gap-3 anim-shake';
+                    this.recordLearnResult(wordObj, false);
+                }
+
+                this.speakText(wordObj.term);
+                setTimeout(() => {
+                    this.state.learn.currentIndex++;
+                    this.saveToStorage();
+                    this.renderLearnQuestion();
+                }, 1100);
+            },
+
+            giveLearnLetterHint() {
+                const item = this.state.learn.queue[this.state.learn.currentIndex];
+                const wordObj = this.state.words.find(w => w.id === item?.wordId);
+                const input = document.getElementById('learnWrittenInput');
+                if (!wordObj || !input) return;
+
+                const target = wordObj.term;
+                const currentLen = input.value.length;
+                input.value = target.slice(0, Math.min(currentLen + 1, target.length));
+                input.focus();
+            },
+
+            handleLearnWrittenAnswer() {
+                const item = this.state.learn.queue[this.state.learn.currentIndex];
+                const wordObj = this.state.words.find(w => w.id === item?.wordId);
+                const input = document.getElementById('learnWrittenInput');
+                const fb = document.getElementById('learnFeedbackBox');
+                if (!wordObj || !input || !fb) return;
+
+                const userVal = input.value.trim().toLowerCase();
+                const correctVal = wordObj.term.trim().toLowerCase();
+                const isCorrect = userVal === correctVal;
+
+                fb.classList.remove('hidden');
+                this.speakText(wordObj.term);
+
+                if (isCorrect) {
+                    fb.className = 'p-4 rounded-2xl bg-emerald-100 text-emerald-800 font-bold text-sm';
+                    fb.innerHTML = `✅ Отлично! <strong>${this.escapeHtml(wordObj.term)}</strong> — ${this.escapeHtml(wordObj.definition)}`;
+                    this.recordLearnResult(wordObj, true);
+                } else {
+                    fb.className = 'p-4 rounded-2xl bg-rose-100 text-rose-800 font-bold text-sm';
+                    fb.innerHTML = `❌ Правильный ответ: <strong>${this.escapeHtml(wordObj.term)}</strong> (${this.escapeHtml(wordObj.definition)})`;
+                    this.recordLearnResult(wordObj, false);
+                }
+
+                setTimeout(() => {
+                    this.state.learn.currentIndex++;
+                    this.saveToStorage();
+                    this.renderLearnQuestion();
+                }, 1450);
+            },
+
+            recordLearnResult(wordObj, isCorrect) {
+                if (isCorrect) {
+                    this.state.learn.correctCount++;
+                    this.state.learn.streak++;
+                    if (this.state.learn.streak > (this.state.learn.bestStreak || 0)) {
+                        this.state.learn.bestStreak = this.state.learn.streak;
+                    }
+                    wordObj.mastery = Math.min((wordObj.mastery || 0) + 1, 2);
+                    if (wordObj.mastery >= 2) {
+                        wordObj.status = 'known';
+                    }
+                } else {
+                    this.state.learn.wrongCount++;
+                    this.state.learn.streak = 0;
+                    wordObj.mastery = 0;
+                    wordObj.status = 'learning';
+                }
+                this.saveToStorage();
+            },
+
+            // ==================== MODE 3: MATCH GAME (ПОДБОР + ТАБЛИЦА РЕКОРДОВ) ====================
+            startMatchGame() {
+                this.stopMatchTimer();
+                if (this.state.words.length === 0) return;
+
+                const chosen = [...this.state.words].sort(() => Math.random() - 0.5).slice(0, 6);
+                const tiles = [];
+                chosen.forEach(w => {
+                    tiles.push({ tileId: `en-${w.id}`, pairId: w.id, text: w.term, lang: 'en', matched: false });
+                    tiles.push({ tileId: `ru-${w.id}`, pairId: w.id, text: w.definition, lang: 'ru', matched: false });
+                });
+                tiles.sort(() => Math.random() - 0.5);
+
+                this.matchTiles = tiles;
+                this.matchSelectedTile = null;
+                this.matchRemainingPairs = chosen.length;
+                this.matchPenalty = 0;
+                this.matchStartTime = performance.now();
+
+                const grid = document.getElementById('matchGridContainer');
+                grid.innerHTML = tiles.map(t => `
+                    <button id="match-tile-${t.tileId}" onclick="app.onMatchTileClick('${t.tileId}')" class="p-4 rounded-2xl border-2 border-indigo-100 hover:border-indigo-400 bg-slate-50 hover:bg-white shadow-sm font-bold text-sm sm:text-base text-slate-800 flex items-center justify-center text-center min-h-[96px] transition select-none">
+                        <span>${this.escapeHtml(t.text)}</span>
+                    </button>
+                `).join('');
+
+                this.matchTimerId = setInterval(() => {
+                    const elapsed = ((performance.now() - this.matchStartTime) / 1000) + this.matchPenalty;
+                    document.getElementById('matchTimerDisplay').textContent = `${elapsed.toFixed(1)} сек`;
+                }, 100);
+            },
+
+            stopMatchTimer() {
+                if (this.matchTimerId) {
+                    clearInterval(this.matchTimerId);
+                    this.matchTimerId = null;
+                }
+            },
+
+            onMatchTileClick(tileId) {
+                const clicked = this.matchTiles.find(t => t.tileId === tileId);
+                if (!clicked || clicked.matched) return;
+
+                if (clicked.lang === 'en' && this.state.tts.autoSpeak) {
+                    this.speakText(clicked.text);
+                }
+
+                const el = document.getElementById(`match-tile-${tileId}`);
+
+                if (!this.matchSelectedTile) {
+                    this.matchSelectedTile = clicked;
+                    el.className = 'p-4 rounded-2xl border-2 border-[#4255FF] bg-[#4255FF] text-white shadow-md font-bold text-sm sm:text-base flex items-center justify-center text-center min-h-[96px] scale-105 transition';
+                    return;
+                }
+
+                if (this.matchSelectedTile.tileId === clicked.tileId) {
+                    this.matchSelectedTile = null;
+                    el.className = 'p-4 rounded-2xl border-2 border-indigo-100 bg-slate-50 font-bold text-sm sm:text-base text-slate-800 flex items-center justify-center text-center min-h-[96px] transition';
+                    return;
+                }
+
+                const prevTile = this.matchSelectedTile;
+                const prevEl = document.getElementById(`match-tile-${prevTile.tileId}`);
+                this.matchSelectedTile = null;
+
+                if (prevTile.pairId === clicked.pairId) {
+                    clicked.matched = true;
+                    prevTile.matched = true;
+                    this.matchRemainingPairs--;
+
+                    el.className = 'p-4 rounded-2xl border-2 border-emerald-500 bg-emerald-500 text-white font-bold text-sm sm:text-base flex items-center justify-center text-center min-h-[96px] anim-pop-out pointer-events-none';
+                    prevEl.className = 'p-4 rounded-2xl border-2 border-emerald-500 bg-emerald-500 text-white font-bold text-sm sm:text-base flex items-center justify-center text-center min-h-[96px] anim-pop-out pointer-events-none';
+
+                    if (this.matchRemainingPairs === 0) {
+                        this.completeMatchGame();
+                    }
+                } else {
+                    this.matchPenalty += 1.0;
+                    el.className = 'p-4 rounded-2xl border-2 border-rose-500 bg-rose-100 text-rose-800 font-bold text-sm sm:text-base flex items-center justify-center text-center min-h-[96px] anim-shake';
+                    prevEl.className = 'p-4 rounded-2xl border-2 border-rose-500 bg-rose-100 text-rose-800 font-bold text-sm sm:text-base flex items-center justify-center text-center min-h-[96px] anim-shake';
+
+                    setTimeout(() => {
+                        if (!clicked.matched) el.className = 'p-4 rounded-2xl border-2 border-indigo-100 bg-slate-50 font-bold text-sm sm:text-base text-slate-800 flex items-center justify-center text-center min-h-[96px] transition';
+                        if (!prevTile.matched) prevEl.className = 'p-4 rounded-2xl border-2 border-indigo-100 bg-slate-50 font-bold text-sm sm:text-base text-slate-800 flex items-center justify-center text-center min-h-[96px] transition';
+                    }, 420);
+                }
+            },
+
+            completeMatchGame() {
+                this.stopMatchTimer();
+                const finalTime = parseFloat((((performance.now() - this.matchStartTime) / 1000) + this.matchPenalty).toFixed(1));
+                const nowStr = new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+                if (!Array.isArray(this.state.match.leaderboard)) {
+                    this.state.match.leaderboard = [];
+                }
+                this.state.match.leaderboard.push({ time: finalTime, date: nowStr });
+                this.state.match.leaderboard.sort((a, b) => a.time - b.time);
+                this.state.match.leaderboard = this.state.match.leaderboard.slice(0, 5);
+
+                const isBest = this.state.match.leaderboard[0]?.time === finalTime;
+                this.saveToStorage();
+                this.renderMatchLeaderboard();
+
+                document.getElementById('matchGridContainer').innerHTML = `
+                    <div class="col-span-full py-10 text-center space-y-4">
+                        <div class="w-16 h-16 rounded-3xl bg-amber-100 text-amber-500 flex items-center justify-center text-3xl mx-auto">
+                            <i class="fa-solid fa-bolt"></i>
+                        </div>
+                        <h3 class="font-display font-extrabold text-2xl sm:text-3xl text-slate-800">
+                            Ваш результат: <span class="text-[#4255FF]">${finalTime} сек!</span>
+                        </h3>
+                        ${isBest ? `<span class="inline-block px-4 py-1 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-xs">🏆 Новый рекорд в таблице памяти!</span>` : ''}
+                        <div>
+                            <button onclick="app.startMatchGame()" class="px-6 py-3 rounded-2xl bg-[#4255FF] hover:bg-indigo-700 text-white font-extrabold text-sm shadow-lg">
+                                Сыграть еще раз
+                            </button>
+                        </div>
+                    </div>
+                `;
+            },
+
+            renderMatchLeaderboard() {
+                const list = this.state.match.leaderboard || [];
+                const container = document.getElementById('matchLeaderboardList');
+                if (list.length === 0) {
+                    container.innerHTML = `<div class="p-4 rounded-2xl bg-slate-50 text-xs text-slate-400 text-center">Сыграйте раунд, чтобы записать первый рекорд в память браузера</div>`;
+                    return;
+                }
+                const medals = ['🥇', '🥈', '🥉', '4.', '5.'];
+                container.innerHTML = list.map((item, idx) => `
+                    <div class="p-3.5 rounded-2xl ${idx === 0 ? 'bg-amber-50 border border-amber-200' : 'bg-slate-50 border border-slate-100'} flex items-center justify-between">
+                        <div class="flex items-center gap-2.5">
+                            <span class="font-extrabold text-base">${medals[idx] || (idx + 1)}</span>
+                            <div>
+                                <div class="font-extrabold text-sm text-slate-800">${item.time.toFixed(1)} сек</div>
+                                <div class="text-[11px] text-slate-400">${this.escapeHtml(item.date)}</div>
+                            </div>
+                        </div>
+                        ${idx === 0 ? `<span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">Рекорд</span>` : ''}
+                    </div>
+                `).join('');
+            },
+
+            // ==================== MODE 4: TEST MODE (ТЕСТ + ИСТОРИЯ В LOCALSTORAGE) ====================
+            initOrResumeTestMode() {
+                this.renderTestHistory();
+                if (!Array.isArray(this.state.test.currentQuestions) || this.state.test.currentQuestions.length === 0) {
+                    this.generateNewTest(false);
+                } else {
+                    this.renderTestQuestions();
+                }
+            },
+
+            generateNewTest(notify = true) {
+                const pool = [...this.state.words].sort(() => Math.random() - 0.5);
+                this.state.test.submitted = false;
+                this.state.test.currentQuestions = pool.map((w, idx) => {
+                    const mod = idx % 3;
+                    if (mod === 0) {
+                        const isTrue = Math.random() > 0.45 || pool.length < 2;
+                        const other = pool.find(x => x.id !== w.id) || w;
+                        return {
+                            type: 'tf',
+                            wordId: w.id,
+                            term: w.term,
+                            shownDef: isTrue ? w.definition : other.definition,
+                            correctDef: w.definition,
+                            correctAnswer: isTrue,
+                            userAnswer: null
+                        };
+                    } else if (mod === 1) {
+                        const distractors = pool.filter(x => x.id !== w.id).sort(() => Math.random() - 0.5).slice(0, 3).map(x => x.definition);
+                        const options = [w.definition, ...distractors].sort(() => Math.random() - 0.5);
+                        return {
+                            type: 'mc',
+                            wordId: w.id,
+                            term: w.term,
+                            options,
+                            correctDef: w.definition,
+                            correctAnswer: w.definition,
+                            userAnswer: null
+                        };
+                    } else {
+                        return {
+                            type: 'written',
+                            wordId: w.id,
+                            term: w.term,
+                            correctDef: w.definition,
+                            correctAnswer: w.term,
+                            userAnswer: ''
+                        };
+                    }
+                });
+
+                document.getElementById('testResultBanner').classList.add('hidden');
+                this.saveToStorage();
+                this.renderTestQuestions();
+                if (notify) this.showToast('Сгенерирован новый вариант теста', 'info');
+            },
+
+            renderTestQuestions() {
+                const questions = this.state.test.currentQuestions || [];
+                const container = document.getElementById('testQuestionsContainer');
+
+                container.innerHTML = questions.map((q, idx) => {
+                    if (q.type === 'tf') {
+                        return `
+                            <div class="bg-white rounded-3xl p-6 shadow-sm border border-indigo-100 space-y-4">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-extrabold uppercase text-indigo-600">${idx + 1}. Верно или Неверно?</span>
+                                    <button onclick="app.speakText('${this.escapeJs(q.term)}')" class="text-xs font-bold text-indigo-600 hover:underline">🔊 Озвучить</button>
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-2xl bg-slate-50">
+                                    <div>
+                                        <div class="text-[11px] font-bold uppercase text-slate-400">Английское слово</div>
+                                        <div class="font-extrabold text-lg text-slate-800">${this.escapeHtml(q.term)}</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-[11px] font-bold uppercase text-slate-400">Перевод</div>
+                                        <div class="font-bold text-lg text-slate-700">${this.escapeHtml(q.shownDef)}</div>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <button onclick="app.setTestAnswer(${idx}, true)" class="py-3 rounded-xl border-2 font-bold text-sm transition ${q.userAnswer === true ? 'border-[#4255FF] bg-indigo-50 text-indigo-800' : 'border-slate-200 text-slate-700'}">Верно</button>
+                                    <button onclick="app.setTestAnswer(${idx}, false)" class="py-3 rounded-xl border-2 font-bold text-sm transition ${q.userAnswer === false ? 'border-[#4255FF] bg-indigo-50 text-indigo-800' : 'border-slate-200 text-slate-700'}">Неверно</button>
+                                </div>
+                                <div id="test-fb-${idx}" class="hidden p-3 rounded-xl text-xs font-bold"></div>
+                            </div>
+                        `;
+                    } else if (q.type === 'mc') {
+                        return `
+                            <div class="bg-white rounded-3xl p-6 shadow-sm border border-indigo-100 space-y-4">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-extrabold uppercase text-purple-600">${idx + 1}. Выберите правильный перевод</span>
+                                    <button onclick="app.speakText('${this.escapeJs(q.term)}')" class="text-xs font-bold text-indigo-600 hover:underline">🔊 Озвучить</button>
+                                </div>
+                                <div class="font-display font-extrabold text-2xl text-slate-800">${this.escapeHtml(q.term)}</div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                    ${q.options.map(opt => `
+                                        <button onclick="app.setTestAnswer(${idx}, '${this.escapeJs(opt)}')" class="p-3.5 rounded-xl border-2 text-left font-bold text-sm transition ${q.userAnswer === opt ? 'border-[#4255FF] bg-indigo-50 text-indigo-800' : 'border-slate-200 text-slate-700'}">
+                                            ${this.escapeHtml(opt)}
+                                        </button>
+                                    `).join('')}
+                                </div>
+                                <div id="test-fb-${idx}" class="hidden p-3 rounded-xl text-xs font-bold"></div>
+                            </div>
+                        `;
+                    } else {
+                        return `
+                            <div class="bg-white rounded-3xl p-6 shadow-sm border border-indigo-100 space-y-4">
+                                <span class="text-xs font-extrabold uppercase text-emerald-600">${idx + 1}. Напишите слово по-английски</span>
+                                <div class="font-display font-bold text-lg text-slate-800">${this.escapeHtml(q.correctDef)}</div>
+                                <input type="text" value="${this.escapeHtml(q.userAnswer || '')}" oninput="app.setTestWrittenAnswer(${idx}, this.value)" placeholder="Введите английское слово..." class="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-[#4255FF] focus:outline-none font-bold text-sm">
+                                <div id="test-fb-${idx}" class="hidden p-3 rounded-xl text-xs font-bold"></div>
+                            </div>
+                        `;
+                    }
+                }).join('');
+            },
+
+            setTestAnswer(qIdx, val) {
+                this.state.test.currentQuestions[qIdx].userAnswer = val;
+                this.saveToStorage();
+                this.renderTestQuestions();
+            },
+
+            setTestWrittenAnswer(qIdx, val) {
+                this.state.test.currentQuestions[qIdx].userAnswer = val;
+                this.saveToStorage(false);
+            },
+
+            submitCurrentTest() {
+                const questions = this.state.test.currentQuestions || [];
+                if (questions.length === 0) return;
+
+                let correct = 0;
+                questions.forEach((q, idx) => {
+                    const fb = document.getElementById(`test-fb-${idx}`);
+                    if (!fb) return;
+                    fb.classList.remove('hidden');
+
+                    let isRight = false;
+                    if (q.type === 'written') {
+                        isRight = String(q.userAnswer || '').trim().toLowerCase() === String(q.correctAnswer).trim().toLowerCase();
+                    } else {
+                        isRight = q.userAnswer === q.correctAnswer;
+                    }
+
+                    if (isRight) {
+                        correct++;
+                        fb.className = 'p-3 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800';
+                        fb.innerHTML = `✅ Верно! (${this.escapeHtml(q.term)} — ${this.escapeHtml(q.correctDef)})`;
+                    } else {
+                        fb.className = 'p-3 rounded-xl text-xs font-bold bg-rose-100 text-rose-800';
+                        fb.innerHTML = `❌ Ошибка. Правильно: <strong>${this.escapeHtml(q.term)} — ${this.escapeHtml(q.correctDef)}</strong>`;
+                    }
+                });
+
+                const pct = Math.round((correct / questions.length) * 100);
+                const nowStr = new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+                if (this.state.test.bestScorePct === null || pct > this.state.test.bestScorePct) {
+                    this.state.test.bestScorePct = pct;
+                }
+                if (!Array.isArray(this.state.test.history)) this.state.test.history = [];
+                this.state.test.history.unshift({ scorePct: pct, correct, total: questions.length, date: nowStr });
+                this.state.test.history = this.state.test.history.slice(0, 8);
+
+                this.saveToStorage();
+                this.renderTestHistory();
+
+                const banner = document.getElementById('testResultBanner');
+                banner.classList.remove('hidden');
+                banner.innerHTML = `
+                    <div class="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                            <span class="text-xs font-extrabold uppercase bg-white/20 px-3 py-1 rounded-full">Результат сохранен в памяти</span>
+                            <h3 class="font-display font-extrabold text-3xl mt-2">Оценка: ${pct}% (${correct} из ${questions.length})</h3>
+                        </div>
+                        <button onclick="app.generateNewTest()" class="px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-extrabold text-xs sm:text-sm">
+                            Новый вариант теста
+                        </button>
+                    </div>
+                `;
+                banner.scrollIntoView({ behavior: 'smooth' });
+            },
+
+            renderTestHistory() {
+                const best = this.state.test.bestScorePct;
+                document.getElementById('testBestBadge').textContent = best !== null && best !== undefined ? `Лучший: ${best}%` : 'Лучший: —';
+
+                const hist = this.state.test.history || [];
+                const container = document.getElementById('testHistoryList');
+                if (hist.length === 0) {
+                    container.innerHTML = `<div class="p-4 rounded-2xl bg-slate-50 text-xs text-slate-400 text-center">Пройдите тест, чтобы сохранить результат в историю</div>`;
+                    return;
+                }
+
+                container.innerHTML = hist.map(h => `
+                    <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                        <div>
+                            <div class="font-extrabold text-sm text-slate-800">${h.scorePct}% (${h.correct}/${h.total})</div>
+                            <div class="text-[11px] text-slate-400">${this.escapeHtml(h.date)}</div>
+                        </div>
+                        <span class="text-xs font-extrabold px-2.5 py-1 rounded-full ${h.scorePct >= 80 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}">
+                            ${h.scorePct >= 80 ? 'Отлично' : 'Повторить'}
+                        </span>
+                    </div>
+                `).join('');
+            },
+
+            // ==================== TAB 5: FULL DICTIONARY MANAGEMENT ====================
+            renderDictionaryList() {
+                document.getElementById('dictCountLabel').textContent = this.state.words.length;
+                const query = (document.getElementById('dictSearchInput')?.value || '').toLowerCase().trim();
+                const statusFilter = document.getElementById('dictStatusFilter')?.value || 'all';
+
+                const filtered = this.state.words.filter(w => {
+                    if (statusFilter === 'learning' && w.status === 'known') return false;
+                    if (statusFilter === 'known' && w.status !== 'known') return false;
+                    if (statusFilter === 'new' && w.status !== 'new') return false;
+                    if (statusFilter === 'starred' && !w.starred) return false;
+                    if (!query) return true;
+                    return w.term.toLowerCase().includes(query) || w.definition.toLowerCase().includes(query);
+                });
+
+                const container = document.getElementById('dictionaryListContainer');
+                if (filtered.length === 0) {
+                    container.innerHTML = `<div class="py-10 text-center text-sm text-slate-400">Слова по заданному фильтру не найдены</div>`;
+                    return;
+                }
+
+                container.innerHTML = filtered.map((w, idx) => `
+                    <div class="py-3.5 px-3 hover:bg-indigo-50/40 rounded-2xl transition flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="flex items-start sm:items-center gap-3 sm:w-4/12">
+                            <span class="text-xs font-bold text-slate-400 w-6">${idx + 1}.</span>
+                            <div>
+                                <div class="font-extrabold text-base text-slate-800 flex items-center gap-2">
+                                    <span>${this.escapeHtml(w.term)}</span>
+                                    ${w.phonetic ? `<span class="text-xs font-normal text-indigo-500">${this.escapeHtml(w.phonetic)}</span>` : ''}
+                                </div>
+                                ${w.example ? `<div class="text-xs text-slate-400 italic mt-0.5">${this.escapeHtml(w.example)}</div>` : ''}
+                            </div>
+                        </div>
+
+                        <div class="sm:w-4/12 text-sm font-semibold text-slate-700 pl-9 sm:pl-0">
+                            ${this.escapeHtml(w.definition)}
+                        </div>
+
+                        <div class="flex flex-wrap items-center justify-end gap-1.5 pl-9 sm:pl-0">
+                            <button onclick="app.toggleWordStatusById('${w.id}')" class="px-2.5 py-1 rounded-xl font-extrabold text-xs transition ${w.status === 'known' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}" title="Нажмите, чтобы переключить статус Знаю / Еще учу">
+                                ${w.status === 'known' ? '✅ Знаю' : '⏳ Еще учу'}
+                            </button>
+
+                            <button onclick="app.speakText('${this.escapeJs(w.term)}', 1.0, this)" class="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center gap-1 transition" title="Озвучить 1.0x">
+                                <i class="fa-solid fa-volume-high"></i>
+                            </button>
+                            <button onclick="app.speakText('${this.escapeJs(w.term)}', 0.68, this)" class="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs transition" title="Медленно 0.7x">
+                                🐢
+                            </button>
+                            <button onclick="app.openWordModal('${w.id}')" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-700 flex items-center justify-center transition" title="Редактировать">
+                                <i class="fa-solid fa-pen text-xs"></i>
+                            </button>
+                            <button onclick="app.deleteWordById('${w.id}')" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-rose-100 text-slate-400 hover:text-rose-600 flex items-center justify-center transition" title="Удалить">
+                                <i class="fa-solid fa-trash text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            },
+
+            toggleWordStatusById(wordId) {
+                const w = this.state.words.find(x => x.id === wordId);
+                if (!w) return;
+                w.status = w.status === 'known' ? 'learning' : 'known';
+                w.mastery = w.status === 'known' ? 2 : 0;
+                this.saveToStorage();
+                this.renderDictionaryList();
+            },
+
+            deleteWordById(wordId) {
+                this.state.words = this.state.words.filter(x => x.id !== wordId);
+                this.saveToStorage();
+                this.renderDictionaryList();
+                this.showToast('Слово удалено из памяти', 'info');
+            },
+
+            // ==================== WORD ADD / EDIT MODAL ====================
+            openWordModal(wordId = null) {
+                this.editingWordId = wordId;
+                const modalTitle = document.getElementById('wordModalTitle');
+                const termEl = document.getElementById('wordInputTerm');
+                const defEl = document.getElementById('wordInputDef');
+                const phonEl = document.getElementById('wordInputPhonetic');
+                const statusEl = document.getElementById('wordInputStatus');
+                const exEl = document.getElementById('wordInputExample');
+
+                if (wordId) {
+                    const w = this.state.words.find(x => x.id === wordId);
+                    if (!w) return;
+                    modalTitle.textContent = 'Редактировать слово';
+                    termEl.value = w.term;
+                    defEl.value = w.definition;
+                    phonEl.value = w.phonetic || '';
+                    statusEl.value = w.status || 'learning';
+                    exEl.value = w.example || '';
+                } else {
+                    modalTitle.textContent = 'Добавить новое слово';
+                    termEl.value = '';
+                    defEl.value = '';
+                    phonEl.value = '';
+                    statusEl.value = 'learning';
+                    exEl.value = '';
+                }
+
+                document.getElementById('wordModal').classList.remove('hidden');
+                setTimeout(() => termEl.focus(), 50);
+            },
+
+            closeWordModal() {
+                document.getElementById('wordModal').classList.add('hidden');
+            },
+
+            saveWordFromModal() {
+                const term = document.getElementById('wordInputTerm').value.trim();
+                const def = document.getElementById('wordInputDef').value.trim();
+                const phonetic = document.getElementById('wordInputPhonetic').value.trim();
+                const status = document.getElementById('wordInputStatus').value;
+                const example = document.getElementById('wordInputExample').value.trim();
+
+                if (!term || !def) {
+                    this.showToast('Заполните английское слово и перевод', 'error');
+                    return;
+                }
+
+                if (this.editingWordId) {
+                    const existing = this.state.words.find(x => x.id === this.editingWordId);
+                    if (existing) {
+                        existing.term = term;
+                        existing.definition = def;
+                        existing.phonetic = phonetic;
+                        existing.status = status;
+                        existing.mastery = status === 'known' ? 2 : 0;
+                        existing.example = example;
+                    }
+                    this.showToast('Слово обновлено и сохранено в памяти!', 'success');
+                } else {
+                    this.state.words.unshift({
+                        id: 'w-' + Date.now(),
+                        term,
+                        definition: def,
+                        phonetic,
+                        example,
+                        status,
+                        mastery: status === 'known' ? 2 : 0,
+                        starred: false
+                    });
+                    this.showToast('Новое слово добавлено в память!', 'success');
+                }
+
+                this.saveToStorage();
+                this.closeWordModal();
+                this.switchTab(this.state.activeTab, false);
+            },
+
+            // ==================== PDF IMPORT & SMART PARSER ====================
+            openPdfModal() {
+                document.getElementById('pdfModal').classList.remove('hidden');
+                if (!document.getElementById('pdfRawTextarea').value.trim()) {
+                    this.loadDemoPdfText(false);
+                }
+            },
+
+            closePdfModal() {
+                document.getElementById('pdfModal').classList.add('hidden');
+            },
+
+            async handlePdfFileUpload(event) {
+                const file = event.target.files?.[0];
+                if (!file) return;
+
+                const statusEl = document.getElementById('pdfUploadStatus');
+                statusEl.classList.remove('hidden');
+                statusEl.textContent = `⏳ Чтение файла "${file.name}"...`;
+
+                try {
+                    if (file.name.toLowerCase().endsWith('.pdf')) {
+                        const arrayBuffer = await file.arrayBuffer();
+                        const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                        const extractedLines = [];
+
+                        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                            statusEl.textContent = `⏳ Обработка страницы ${pageNum} из ${pdf.numPages}...`;
+                            const page = await pdf.getPage(pageNum);
+                            const textContent = await page.getTextContent();
+
+                            const lineBuckets = new Map();
+                            textContent.items.forEach(item => {
+                                const str = item.str;
+                                if (!str || !str.trim()) return;
+                                const y = Math.round(item.transform[5] / 4) * 4;
+                                if (!lineBuckets.has(y)) lineBuckets.set(y, []);
+                                lineBuckets.get(y).push({ x: item.transform[4], text: str });
+                            });
+
+                            const sortedYs = Array.from(lineBuckets.keys()).sort((a, b) => b - a);
+                            sortedYs.forEach(y => {
+                                const rowItems = lineBuckets.get(y).sort((a, b) => a.x - b.x);
+                                const lineStr = rowItems.map(i => i.text).join(' ').replace(/\s+/g, ' ').trim();
+                                if (lineStr.length > 2) extractedLines.push(lineStr);
+                            });
+                        }
+
+                        document.getElementById('pdfRawTextarea').value = extractedLines.join('\n');
+                        statusEl.textContent = `✅ Извлечено страниц: ${pdf.numPages}`;
+                        this.parsePdfText();
+                        this.showToast(`Из PDF распознано ${this.parsedPdfRows.length} слов!`, 'success');
+                    } else {
+                        const txt = await file.text();
+                        document.getElementById('pdfRawTextarea').value = txt;
+                        statusEl.textContent = `✅ Файл загружен`;
+                        this.parsePdfText();
+                    }
+                } catch (e) {
+                    console.error(e);
+                    statusEl.textContent = `❌ Не удалось прочитать PDF. Попробуйте другой файл.`;
+                }
+            },
+
+            loadDemoPdfText(notify = true) {
+                const sample = [
+                    "1. meticulous [məˈtɪkjələs] — дотошный, тщательный, педантичный",
+                    "2. elaborate - детально разрабатывать, подробный",
+                    "3. hindrance — помеха, препятствие",
+                    "4. coherent : связный, последовательный (о речи или коде)",
+                    "5. alleviate облегчать, смягчать (проблему, боль)",
+                    "6. obsolete — устарелый, вышедший из употребления",
+                    "7. versatile - универсальный, разносторонний",
+                    "8. scrutinize тщательно изучать, проверять"
+                ].join('\n');
+
+                document.getElementById('pdfRawTextarea').value = sample;
+                this.parsePdfText();
+                if (notify) this.showToast('Демо-текст из PDF загружен!', 'info');
+            },
+
+            parsePdfText() {
+                const raw = document.getElementById('pdfRawTextarea').value;
+                const mode = document.getElementById('pdfDelimiterSelect').value;
+                const lines = raw.split(/\r?\n/);
+                const parsed = [];
+
+                lines.forEach(line => {
+                    let cleaned = line.trim().replace(/^(\d+[\.\)\-]|\•|\*)\s*/, '').trim();
+                    if (!cleaned || cleaned.length < 2) return;
+
+                    let phonetic = '';
+                    const phonMatch = cleaned.match(/(\[[^\]]+\]|\/[^\/]+\/)/);
+                    if (phonMatch) {
+                        phonetic = phonMatch[1];
+                        cleaned = cleaned.replace(phonMatch[1], ' ').replace(/\s+/g, ' ').trim();
+                    }
+
+                    let term = '';
+                    let def = '';
+
+                    if (mode === 'tab' && cleaned.includes('\t')) {
+                        const parts = cleaned.split('\t');
+                        term = parts[0];
+                        def = parts.slice(1).join(' ');
+                    } else if (mode === 'colon' && /[:;]/.test(cleaned)) {
+                        const parts = cleaned.split(/[:;]/);
+                        term = parts[0];
+                        def = parts.slice(1).join(' ');
+                    } else if (mode === 'dash' && /\s+[-–—]\s+/.test(cleaned)) {
+                        const parts = cleaned.split(/\s+[-–—]\s+/);
+                        term = parts[0];
+                        def = parts.slice(1).join(' - ');
+                    } else {
+                        if (cleaned.includes('\t')) {
+                            const parts = cleaned.split('\t');
+                            term = parts[0];
+                            def = parts.slice(1).join(' ');
+                        } else if (/\s+[-–—=:]\s+/.test(cleaned)) {
+                            const parts = cleaned.split(/\s+[-–—=:]\s+/);
+                            term = parts[0];
+                            def = parts.slice(1).join(' ');
+                        } else {
+                            const latToCyr = cleaned.match(/^([A-Za-z0-9\s\-'’(),.\/]+?)\s+([А-Яа-яЁё].*)$/);
+                            const cyrToLat = cleaned.match(/^([А-Яа-яЁё0-9\s\-'’(),.\/]+?)\s+([A-Za-z].*)$/);
+                            if (latToCyr) {
+                                term = latToCyr[1];
+                                def = latToCyr[2];
+                            } else if (cyrToLat) {
+                                term = cyrToLat[2];
+                                def = cyrToLat[1];
+                            } else if (cleaned.includes('-')) {
+                                const parts = cleaned.split('-');
+                                term = parts[0];
+                                def = parts.slice(1).join('-');
+                            }
+                        }
+                    }
+
+                    term = (term || '').trim();
+                    def = (def || '').trim();
+                    if (term && def) parsed.push({ term, definition: def, phonetic });
+                });
+
+                this.parsedPdfRows = parsed;
+                this.renderPdfPreviewRows();
+            },
+
+            swapParsedPdfColumns() {
+                this.parsedPdfRows = this.parsedPdfRows.map(r => ({
+                    term: r.definition,
+                    definition: r.term,
+                    phonetic: r.phonetic
+                }));
+                this.renderPdfPreviewRows();
+            },
+
+            addEmptyParsedPdfRow() {
+                this.parsedPdfRows.push({ term: '', definition: '', phonetic: '' });
+                this.renderPdfPreviewRows();
+            },
+
+            renderPdfPreviewRows() {
+                document.getElementById('pdfParsedCount').textContent = this.parsedPdfRows.length;
+                const container = document.getElementById('pdfPreviewRows');
+                if (this.parsedPdfRows.length === 0) {
+                    container.innerHTML = `<div class="p-4 rounded-xl bg-slate-50 text-center text-xs text-slate-400">Нет распознанных строк</div>`;
+                    return;
+                }
+
+                container.innerHTML = this.parsedPdfRows.map((r, idx) => `
+                    <div class="grid grid-cols-12 gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-200">
+                        <div class="col-span-5 flex items-center gap-1.5">
+                            <button onclick="app.speakText(app.parsedPdfRows[${idx}].term, 1.0, this)" class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 text-xs">
+                                <i class="fa-solid fa-volume-high"></i>
+                            </button>
+                            <input type="text" value="${this.escapeHtml(r.term)}" oninput="app.parsedPdfRows[${idx}].term = this.value" class="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-bold">
+                        </div>
+                        <div class="col-span-6">
+                            <input type="text" value="${this.escapeHtml(r.definition)}" oninput="app.parsedPdfRows[${idx}].definition = this.value" class="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-xs">
+                        </div>
+                        <div class="col-span-1 text-right">
+                            <button onclick="app.parsedPdfRows.splice(${idx},1); app.renderPdfPreviewRows();" class="w-7 h-7 rounded-lg hover:bg-rose-100 text-slate-400 hover:text-rose-600">
+                                <i class="fa-solid fa-trash text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            },
+
+            confirmPdfImport() {
+                const valid = this.parsedPdfRows.filter(r => r.term.trim() && r.definition.trim());
+                if (valid.length === 0) {
+                    this.showToast('Нет заполненных пар слов для импорта', 'error');
+                    return;
+                }
+
+                const replaceAll = document.getElementById('pdfReplaceExistingCheck').checked;
+                const newItems = valid.map((r, i) => ({
+                    id: `pdf-${Date.now()}-${i}`,
+                    term: r.term.trim(),
+                    definition: r.definition.trim(),
+                    phonetic: r.phonetic || '',
+                    example: '',
+                    status: 'learning',
+                    mastery: 0,
+                    starred: false
+                }));
+
+                if (replaceAll) {
+                    this.state.words = newItems;
+                } else {
+                    this.state.words = [...newItems, ...this.state.words];
+                }
+
+                this.state.flashcards.index = 0;
+                this.state.learn.queue = [];
+                this.state.test.currentQuestions = [];
+                this.saveToStorage();
+                this.closePdfModal();
+                this.switchTab('flashcards');
+                this.showToast(`🎉 Импортировано и сохранено ${newItems.length} слов!`, 'success');
+            },
+
+            // ==================== BACKUP (JSON EXPORT/IMPORT) & RESET ====================
+            openBackupModal() {
+                document.getElementById('backupModal').classList.remove('hidden');
+            },
+
+            closeBackupModal() {
+                document.getElementById('backupModal').classList.add('hidden');
+            },
+
+            exportJsonBackup() {
+                const dataStr = JSON.stringify(this.state, null, 2);
+                const blob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `lexicards_backup_${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+                this.showToast('📦 Файл словаря (.json) скачан!', 'success');
+            },
+
+            async importJsonBackup(event) {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                try {
+                    const text = await file.text();
+                    const parsed = JSON.parse(text);
+                    if (parsed && Array.isArray(parsed.words)) {
+                        this.state = { ...this.state, ...parsed };
+                        this.saveToStorage();
+                        this.syncHeaderControls();
+                        this.closeBackupModal();
+                        this.switchTab(this.state.activeTab || 'flashcards');
+                        this.showToast(`✅ Загружено слов из резервной копии: ${this.state.words.length}`, 'success');
+                    } else {
+                        this.showToast('Неверный формат JSON-файла', 'error');
+                    }
+                } catch (e) {
+                    this.showToast('Ошибка при чтении JSON-файла', 'error');
+                }
+            },
+
+            resetLearningProgressOnly() {
+                this.state.words.forEach(w => {
+                    w.status = 'learning';
+                    w.mastery = 0;
+                });
+                this.state.flashcards.index = 0;
+                this.state.learn = { modeType: 'mixed', queue: [], currentIndex: 0, correctCount: 0, wrongCount: 0, streak: 0, bestStreak: 0 };
+                this.state.match.leaderboard = [];
+                this.state.test = { bestScorePct: null, history: [], currentQuestions: [], submitted: false };
+
+                this.saveToStorage();
+                this.closeBackupModal();
+                this.switchTab('flashcards');
+                this.showToast('Прогресс обучения и рекорды сброшены', 'info');
+            },
+
+            restoreFactoryDefaults() {
+                localStorage.removeItem(STORAGE_KEY);
+                this.state.words = JSON.parse(JSON.stringify(DEFAULT_WORDS));
+                this.resetLearningProgressOnly();
+                this.showToast('Восстановлен исходный стартовый словарь', 'success');
+            },
+
+            // ==================== KEYBOARD SHORTCUTS & HELPERS ====================
+            setupKeyboardShortcuts() {
+                window.addEventListener('keydown', (e) => {
+                    const tag = document.activeElement?.tagName;
+                    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+                    if (this.state.activeTab !== 'flashcards') return;
+
+                    if (e.code === 'Space') {
+                        e.preventDefault();
+                        this.flipFlashcard();
+                    } else if (e.code === 'ArrowRight') {
+                        e.preventDefault();
+                        this.nextFlashcard();
+                    } else if (e.code === 'ArrowLeft') {
+                        e.preventDefault();
+                        this.prevFlashcard();
+                    } else if (e.code === 'KeyS') {
+                        e.preventDefault();
+                        this.speakCurrentFlashcard(1.0);
+                    }
+                });
+            },
+
+            showToast(msg, type = 'info') {
+                const container = document.getElementById('toastContainer');
+                const styles = {
+                    success: 'bg-emerald-600 text-white',
+                    error: 'bg-rose-600 text-white',
+                    info: 'bg-slate-900 text-white'
+                };
+                const el = document.createElement('div');
+                el.className = `${styles[type] || styles.info} px-4 py-3 rounded-2xl shadow-xl text-xs sm:text-sm font-extrabold flex items-center gap-2 transition-all duration-300`;
+                el.textContent = msg;
+                container.appendChild(el);
+                setTimeout(() => {
+                    el.style.opacity = '0';
+                    setTimeout(() => el.remove(), 300);
+                }, 3000);
+            },
+
+            escapeHtml(str) {
+                return String(str || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+            },
+
+            escapeJs(str) {
+                return String(str || '')
+                    .replace(/\\/g, '\\\\')
+                    .replace(/'/g, "\\'")
+                    .replace(/"/g, '\\"');
+            }
+        };
+
+        window.onload = () => app.init();
+    </script>
+</body>
+</html>
